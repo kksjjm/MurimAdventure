@@ -14,10 +14,86 @@ export default class BootScene extends Phaser.Scene {
     super({ key: 'BootScene' });
   }
 
+  preload() {
+    // ======================================================================
+    // Load character spritesheets (64x64 frames)
+    // ======================================================================
+    const charAnims = ['Idle', 'Walk', 'Slice', 'Hit', 'Death', 'Run'];
+    const charDirs = ['Down', 'Side', 'Up'];
+    for (const anim of charAnims) {
+      for (const dir of charDirs) {
+        const key = `char_${anim.toLowerCase()}_${dir.toLowerCase()}`;
+        this.load.spritesheet(key, `assets/char/${anim}_${dir}.png`, {
+          frameWidth: 64,
+          frameHeight: 64,
+        });
+      }
+    }
+
+    // ======================================================================
+    // Load mob spritesheets (32x32 frames, 4 frames each)
+    // ======================================================================
+    const mobTypes = [
+      'Orc',
+      'Orc___Warrior',
+      'Orc___Shaman',
+      'Orc___Rogue',
+      'Skeleton___Base',
+      'Skeleton___Warrior',
+      'Skeleton___Mage',
+      'Skeleton___Rogue',
+    ];
+    const mobAnims = ['Idle', 'Run', 'Death'];
+    for (const mob of mobTypes) {
+      for (const anim of mobAnims) {
+        // Convert filename like "Orc___Warrior" to key "orc_warrior"
+        const key = `${mob.toLowerCase().replace(/___/g, '_')}_${anim.toLowerCase()}`;
+        this.load.spritesheet(key, `assets/mobs/${mob}_${anim}.png`, {
+          frameWidth: 32,
+          frameHeight: 32,
+        });
+      }
+    }
+  }
+
   create() {
-    this._generatePlayerBase();
+    // ======================================================================
+    // Create player animations from loaded spritesheets
+    // ======================================================================
+    this._createPlayerAnimations();
+
+    // ======================================================================
+    // Create monster animations from loaded spritesheets
+    // ======================================================================
+    this._createMonsterAnimations();
+
+    // ======================================================================
+    // Create a static 'player_base' texture from the first frame of idle_down
+    // so existing code that references 'player_base' doesn't break
+    // ======================================================================
+    if (this.textures.exists('char_idle_down')) {
+      const srcTexture = this.textures.get('char_idle_down');
+      const srcFrame = srcTexture.get(0);
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(
+        srcFrame.source.image,
+        srcFrame.cutX, srcFrame.cutY, srcFrame.cutWidth, srcFrame.cutHeight,
+        0, 0, 64, 64
+      );
+      this.textures.addCanvas('player_base', canvas);
+    } else {
+      // Fallback: generate programmatically
+      this._generatePlayerBase();
+    }
+
+    // ======================================================================
+    // Generate programmatic textures for everything NOT covered by assets
+    // ======================================================================
     this._generateEquipmentLayers();
-    this._generateMonsterSprites();
+    this._generateMonsterSprites();   // kept as fallback textures
     this._generateTileTextures();
     this._generateItemIcons();
     this._generateUIElements();
@@ -27,6 +103,144 @@ export default class BootScene extends Phaser.Scene {
     this._generatePortalTexture();
 
     this.scene.start('PreloadScene');
+  }
+
+  // ==========================================================================
+  // Player Animations
+  // ==========================================================================
+
+  _createPlayerAnimations() {
+    const directions = ['down', 'side', 'up'];
+
+    // Idle animations (4 frames based on 256x64 sheet)
+    for (const dir of directions) {
+      const key = `char_idle_${dir}`;
+      if (!this.textures.exists(key)) continue;
+      this.anims.create({
+        key: `player_idle_${dir}`,
+        frames: this.anims.generateFrameNumbers(key, { start: 0, end: 3 }),
+        frameRate: 6,
+        repeat: -1,
+      });
+    }
+
+    // Walk animations (6 frames based on 384x64 sheet)
+    for (const dir of directions) {
+      const key = `char_walk_${dir}`;
+      if (!this.textures.exists(key)) continue;
+      this.anims.create({
+        key: `player_walk_${dir}`,
+        frames: this.anims.generateFrameNumbers(key, { start: 0, end: 5 }),
+        frameRate: 10,
+        repeat: -1,
+      });
+    }
+
+    // Run animations (6 frames)
+    for (const dir of directions) {
+      const key = `char_run_${dir}`;
+      if (!this.textures.exists(key)) continue;
+      this.anims.create({
+        key: `player_run_${dir}`,
+        frames: this.anims.generateFrameNumbers(key, { start: 0, end: 5 }),
+        frameRate: 12,
+        repeat: -1,
+      });
+    }
+
+    // Attack (slice) animations (variable frames, try 4)
+    for (const dir of directions) {
+      const key = `char_slice_${dir}`;
+      if (!this.textures.exists(key)) continue;
+      const tex = this.textures.get(key);
+      const frameCount = tex.frameTotal - 1; // subtract __BASE
+      this.anims.create({
+        key: `player_attack_${dir}`,
+        frames: this.anims.generateFrameNumbers(key, { start: 0, end: Math.max(0, frameCount - 1) }),
+        frameRate: 12,
+        repeat: 0,
+      });
+    }
+
+    // Hit animations
+    for (const dir of directions) {
+      const key = `char_hit_${dir}`;
+      if (!this.textures.exists(key)) continue;
+      const tex = this.textures.get(key);
+      const frameCount = tex.frameTotal - 1;
+      this.anims.create({
+        key: `player_hit_${dir}`,
+        frames: this.anims.generateFrameNumbers(key, { start: 0, end: Math.max(0, frameCount - 1) }),
+        frameRate: 10,
+        repeat: 0,
+      });
+    }
+
+    // Death animations
+    for (const dir of directions) {
+      const key = `char_death_${dir}`;
+      if (!this.textures.exists(key)) continue;
+      const tex = this.textures.get(key);
+      const frameCount = tex.frameTotal - 1;
+      this.anims.create({
+        key: `player_death_${dir}`,
+        frames: this.anims.generateFrameNumbers(key, { start: 0, end: Math.max(0, frameCount - 1) }),
+        frameRate: 8,
+        repeat: 0,
+      });
+    }
+  }
+
+  // ==========================================================================
+  // Monster Animations
+  // ==========================================================================
+
+  _createMonsterAnimations() {
+    const mobTypes = [
+      'orc',
+      'orc_warrior',
+      'orc_shaman',
+      'orc_rogue',
+      'skeleton_base',
+      'skeleton_warrior',
+      'skeleton_mage',
+      'skeleton_rogue',
+    ];
+
+    for (const mob of mobTypes) {
+      // Idle (4 frames)
+      const idleKey = `${mob}_idle`;
+      if (this.textures.exists(idleKey)) {
+        this.anims.create({
+          key: `${mob}_idle_anim`,
+          frames: this.anims.generateFrameNumbers(idleKey, { start: 0, end: 3 }),
+          frameRate: 6,
+          repeat: -1,
+        });
+      }
+
+      // Run (4 frames)
+      const runKey = `${mob}_run`;
+      if (this.textures.exists(runKey)) {
+        this.anims.create({
+          key: `${mob}_run_anim`,
+          frames: this.anims.generateFrameNumbers(runKey, { start: 0, end: 3 }),
+          frameRate: 8,
+          repeat: -1,
+        });
+      }
+
+      // Death (4 frames)
+      const deathKey = `${mob}_death`;
+      if (this.textures.exists(deathKey)) {
+        this.anims.create({
+          key: `${mob}_death_anim`,
+          frames: this.anims.generateFrameNumbers(deathKey, { start: 0, end: 3 }),
+          frameRate: 8,
+          repeat: 0,
+        });
+      }
+    }
   }
 
   // ==========================================================================

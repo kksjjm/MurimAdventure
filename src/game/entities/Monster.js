@@ -7,7 +7,18 @@ import { ITEMS_BY_ID } from '../../data/defaultData.js';
 
 export default class Monster extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y, monsterData) {
+    // Map monster IDs to new mob sprite base keys
     const spriteMap = {
+      mon_wild_boar: 'orc',
+      mon_mountain_bandit: 'orc_warrior',
+      mon_poison_snake: 'skeleton_base',
+      mon_dark_swordsman: 'skeleton_warrior',
+      mon_mountain_spirit: 'orc_shaman',
+      mon_blood_demon_king: 'skeleton_mage',
+    };
+
+    // Legacy fallback map (programmatic textures)
+    const legacySpriteMap = {
       mon_wild_boar: 'monster_boar',
       mon_mountain_bandit: 'monster_bandit',
       mon_poison_snake: 'monster_snake',
@@ -15,16 +26,39 @@ export default class Monster extends Phaser.Physics.Arcade.Sprite {
       mon_mountain_spirit: 'monster_wolf',
       mon_blood_demon_king: 'monster_bandit',
     };
-    const spriteKey = spriteMap[monsterData.spriteKey] || spriteMap[monsterData.id] || 'monster_boar';
+
+    const mobBaseKey = spriteMap[monsterData.spriteKey] || spriteMap[monsterData.id] || 'orc';
+    const idleTextureKey = `${mobBaseKey}_idle`;
+
+    // Use new spritesheet if available, otherwise fall back to legacy programmatic texture
+    let spriteKey;
+    if (scene.textures.exists(idleTextureKey)) {
+      spriteKey = idleTextureKey;
+    } else {
+      spriteKey = legacySpriteMap[monsterData.spriteKey] || legacySpriteMap[monsterData.id] || 'monster_boar';
+    }
+
     super(scene, x, y, spriteKey);
+
+    // Store mob base key for animation lookups
+    this.mobBaseKey = mobBaseKey;
 
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
     this.setDepth(9);
-    // 64x64 sprite with tighter collision body
-    this.body.setSize(36, 40);
-    this.body.setOffset(14, 20);
+    // Adjust collision body based on whether using new 32x32 sprites or legacy 64x64
+    const usingNewSprites = scene.textures.exists(idleTextureKey);
+    if (usingNewSprites) {
+      // 32x32 sprite
+      this.body.setSize(20, 24);
+      this.body.setOffset(6, 6);
+    } else {
+      // 64x64 legacy sprite
+      this.body.setSize(36, 40);
+      this.body.setOffset(14, 20);
+    }
+    this._usingNewSprites = usingNewSprites;
 
     // Prevent monsters from being pushed out of bounds
     this.setCollideWorldBounds(true);
@@ -72,6 +106,12 @@ export default class Monster extends Phaser.Physics.Arcade.Sprite {
     // Health bar and name
     this.healthBar = this._createHealthBar();
     this.nameText = this._createNameText();
+
+    // Play idle animation if available
+    const idleAnimKey = `${this.mobBaseKey}_idle_anim`;
+    if (scene.anims.exists(idleAnimKey)) {
+      this.play(idleAnimKey);
+    }
   }
 
   _createHealthBar() {
@@ -149,9 +189,19 @@ export default class Monster extends Phaser.Physics.Arcade.Sprite {
     this._drawHealthBar();
   }
 
+  _playMobAnim(type) {
+    const animKey = `${this.mobBaseKey}_${type}_anim`;
+    if (this.scene && this.scene.anims.exists(animKey)) {
+      if (!this.anims.currentAnim || this.anims.currentAnim.key !== animKey) {
+        this.play(animKey);
+      }
+    }
+  }
+
   _handleIdle(player, dist, time, delta) {
     this.setVelocity(0, 0);
     this.idleTimer += delta;
+    this._playMobAnim('idle');
 
     if (this._shouldChase(dist)) {
       this.aiState = 'chase';
@@ -198,6 +248,8 @@ export default class Monster extends Phaser.Physics.Arcade.Sprite {
     } else {
       this.setVelocity(0, dy > 0 ? speed : -speed);
     }
+
+    this._playMobAnim('run');
   }
 
   _handleChase(player, dist, time, delta) {
@@ -224,10 +276,13 @@ export default class Monster extends Phaser.Physics.Arcade.Sprite {
     } else {
       this.setVelocity(0, dy > 0 ? this.moveSpeed : -this.moveSpeed);
     }
+
+    this._playMobAnim('run');
   }
 
   _handleAttack(player, dist, time, delta) {
     this.setVelocity(0, 0);
+    this._playMobAnim('idle');
 
     if (dist > this.attackRange * 1.5) {
       this.aiState = 'chase';
@@ -293,6 +348,12 @@ export default class Monster extends Phaser.Physics.Arcade.Sprite {
 
     this.setVelocity(0, 0);
     this.body.enable = false;
+
+    // Play death animation if available
+    const deathAnimKey = `${this.mobBaseKey}_death_anim`;
+    if (this.scene.anims.exists(deathAnimKey)) {
+      this.play(deathAnimKey);
+    }
 
     this._dropLoot();
 

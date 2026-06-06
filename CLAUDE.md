@@ -12,7 +12,7 @@ Phaser 3 기반 웹 게임 + 관리자 패널을 Vite로 번들링하여 브라�
 - **Language**: Vanilla JavaScript (ES Modules)
 - **Admin Panel**: Vanilla JS + inline CSS (SPA)
 - **Data Storage**: localStorage (세이브/로드, admin 데이터)
-- **Assets**: 프로그래밍 방식으로 생성 (BootScene에서 Graphics API로 텍스처 생성)
+- **Assets**: Pixel Crawler Free Pack 스프라이트 + 프로그래밍 방식 텍스처 (폴백)
 
 ## How to Run
 
@@ -270,12 +270,19 @@ MurimAdventure/
 
 ## Sprite System
 
-모든 텍스처는 BootScene.js에서 Phaser Graphics API로 프로그래밍 생성:
+실제 스프라이트 에셋(Pixel Crawler Free Pack) + 프로그래밍 생성 텍스처 혼용:
 
-- **캐릭터 (64x64)**: 상투 스타일 무협 캐릭터, 도복, 띠, 신발 디테일
+### 실제 에셋 (public/assets/)
+- **캐릭터 (64x64, 스프라이트시트)**: Idle/Walk/Run/Slice/Hit/Death × Down/Side/Up = 18장
+- **몬스터 (32x32, 스프라이트시트)**: Orc(4종)/Skeleton(4종) × Idle/Run/Death = 24장
+- **타일셋**: Floors, Walls, Dungeon, Water 타일시트
+- **나무**: 3종 트리 스프라이트
+- **무기**: Wood, Bone, Hands 스프라이트
+
+### 프로그래밍 생성 (BootScene.js, 폴백)
 - **장비 레이어 (64x64)**: 무기 4종(검/창/쌍수/지팡이), 투구 2종, 갑옷 2종, 방패, 장갑, 신발, 허리띠, 목걸이, 부적
-- **NPC (64x64)**: 촌장(녹색 도포), 대장장이(가죽 앞치마), 상인(보라색 도포), 경비병(갑옷+창), 약초꾼(녹색 옷)
-- **몬스터 (64x64)**: 멧돼지, 산적, 늑대, 독사 (디테일한 픽셀아트)
+- **NPC (64x64)**: 촌장, 대장장이, 상인, 경비병, 약초꾼
+- **타일 (32x32)**: 풀, 흙, 돌, 물, 벽, 나무 (폴백)
 - **타일 (32x32)**: 풀, 흙, 돌, 물, 벽, 나무
 - **포탈 (32x32)**: 파란 글로우 원형
 - **아이템 아이콘 (16x16)**: 검, 지팡이, 갑옷, 물약

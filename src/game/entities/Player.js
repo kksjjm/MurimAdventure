@@ -50,7 +50,9 @@ const RARITY_TINT = {
 
 export default class Player extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y) {
-    super(scene, x, y, 'player_base');
+    // Use the spritesheet texture if available, otherwise fall back to static texture
+    const initialTexture = scene.textures.exists('char_idle_down') ? 'char_idle_down' : 'player_base';
+    super(scene, x, y, initialTexture);
 
     scene.add.existing(this);
     scene.physics.add.existing(this);
@@ -59,6 +61,11 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.setDepth(10);
     this.body.setSize(32, 40);
     this.body.setOffset(16, 20);
+
+    // Play initial idle animation if available
+    if (scene.anims.exists('player_idle_down')) {
+      this.play('player_idle_down');
+    }
 
     // --- Core Stats ---
     this.stats = { ...DEFAULT_PLAYER_STATS };
@@ -244,6 +251,37 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     this.setVelocity(vx, vy);
+
+    // Animation state machine
+    this._updateAnimation(vx, vy);
+  }
+
+  _getFacingDirection() {
+    // Map left/right to 'side' for animation keys
+    if (this.facing === 'left' || this.facing === 'right') return 'side';
+    return this.facing; // 'up' or 'down'
+  }
+
+  _updateAnimation(vx, vy) {
+    if (vx !== 0 || vy !== 0) {
+      // Moving
+      const dir = this._getFacingDirection();
+      const animKey = `player_walk_${dir}`;
+      if (this.scene.anims.exists(animKey)) {
+        if (!this.anims.currentAnim || this.anims.currentAnim.key !== animKey) {
+          this.play(animKey);
+        }
+      }
+    } else {
+      // Idle
+      const dir = this._getFacingDirection();
+      const animKey = `player_idle_${dir}`;
+      if (this.scene.anims.exists(animKey)) {
+        if (!this.anims.currentAnim || this.anims.currentAnim.key !== animKey) {
+          this.play(animKey);
+        }
+      }
+    }
   }
 
   // ==========================================================================
@@ -279,6 +317,20 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       case 'right': dx = lungeDist; break;
       case 'up': dy = -lungeDist; break;
       case 'down': default: dy = lungeDist; break;
+    }
+
+    // Play attack (slice) animation if available
+    const dir = this._getFacingDirection();
+    const attackAnimKey = `player_attack_${dir}`;
+    if (this.scene.anims.exists(attackAnimKey)) {
+      this.play(attackAnimKey);
+      this.once('animationcomplete', () => {
+        // Return to idle after attack animation finishes
+        const idleKey = `player_idle_${this._getFacingDirection()}`;
+        if (this.scene && this.scene.anims.exists(idleKey)) {
+          this.play(idleKey);
+        }
+      });
     }
 
     // Lunge forward
