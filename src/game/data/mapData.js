@@ -14,8 +14,8 @@ const field_01 = {
   type: 'field',
   spawns: { player: { x: 25, y: 25 } },
   portals: [
-    { x: 25, y: 3, targetMap: 'village_01', targetX: 15, targetY: 28, label: '\u2192 \ubb34\ub9bc\ucd0c' },
-    { x: 47, y: 25, targetMap: 'dark_forest', targetX: 2, targetY: 15, label: '\u2192 \ud751\ub9bc' },
+    { x: 25, y: 3, targetMap: 'village_01', targetX: 15, targetY: 25, label: '→ 무림촌' },
+    { x: 47, y: 25, targetMap: 'dark_forest', targetX: 5, targetY: 15, label: '→ 흑림' },
   ],
   monsterConfig: {
     types: ['mon_wild_boar', 'mon_mountain_bandit', 'mon_poison_snake'],
@@ -99,9 +99,9 @@ const village_01 = {
   width: 30,
   height: 30,
   type: 'village',
-  spawns: { player: { x: 15, y: 28 } },
+  spawns: { player: { x: 15, y: 25 } },
   portals: [
-    { x: 15, y: 28, targetMap: 'field_01', targetX: 25, targetY: 5, label: '\u2192 \ub179\ub9bc \ud3c9\uc6d0' },
+    { x: 15, y: 29, targetMap: 'field_01', targetX: 25, targetY: 5, label: '→ 녹림 평원' },
   ],
   monsterConfig: null, // No monsters in village
   tiles: village_01_tiles,
@@ -215,9 +215,9 @@ const dark_forest = {
   width: 40,
   height: 40,
   type: 'forest',
-  spawns: { player: { x: 2, y: 15 } },
+  spawns: { player: { x: 5, y: 15 } },
   portals: [
-    { x: 0, y: 15, targetMap: 'field_01', targetX: 45, targetY: 25, label: '\u2192 \ub179\ub9bc \ud3c9\uc6d0' },
+    { x: 0, y: 15, targetMap: 'field_01', targetX: 45, targetY: 25, label: '→ 녹림 평원' },
   ],
   monsterConfig: {
     types: ['mon_wild_boar', 'mon_mountain_bandit', 'mon_poison_snake', 'mon_gray_wolf'],

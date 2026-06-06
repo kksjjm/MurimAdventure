@@ -566,6 +566,8 @@ export default class WorldScene extends Phaser.Scene {
   }
 
   _checkPortals() {
+    if (this._transitioning) return;
+
     for (const portal of this.portalZones) {
       const dist = Phaser.Math.Distance.Between(
         this.player.x, this.player.y, portal.x, portal.y
@@ -574,6 +576,7 @@ export default class WorldScene extends Phaser.Scene {
       if (dist < PORTAL_RANGE) {
         portal.label.setVisible(true);
         if (dist < 20) {
+          this._transitioning = true;
           MapTransitionSystem.transition(this, portal.targetMap, portal.targetX, portal.targetY);
           return;
         }
