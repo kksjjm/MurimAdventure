@@ -195,6 +195,31 @@ export class ItemEditor {
                 <label>아이콘</label>
                 <input type="text" id="editItemIcon" value="${item.icon || ''}" placeholder="icon_sword">
               </div>
+              <div class="form-group">
+                <label>스프라이트 키</label>
+                <input type="text" id="editItemSpriteKey" value="${item.spriteKey || ''}" placeholder="equip_weapon_sword">
+                <small style="color:var(--text-dim);font-size:10px;">장비 착용 시 캐릭터에 표시될 스프라이트</small>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>기본 공격력 (무기)</label>
+                <input type="number" id="editItemBaseATK" value="${item.baseATK || 0}" min="0">
+              </div>
+              <div class="form-group">
+                <label>기본 공격속도 (무기)</label>
+                <input type="number" id="editItemBaseAtkSpd" value="${item.baseATK_SPEED || 0}" min="0">
+              </div>
+              <div class="form-group">
+                <label>사정거리 (무기)</label>
+                <input type="number" id="editItemBaseRange" value="${item.baseRange || 0}" min="0">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>기본 방어력 (방어구)</label>
+                <input type="number" id="editItemBaseDEF" value="${item.baseDEF || 0}" min="0">
+              </div>
               <div class="form-group" style="display:flex;align-items:flex-end;gap:10px;">
                 <label style="display:flex;align-items:center;gap:6px;">
                   <input type="checkbox" id="editItemStackable" ${item.stackable ? 'checked' : ''}>
@@ -287,6 +312,11 @@ export class ItemEditor {
         if (inp.value.trim()) effects.push(inp.value.trim());
       });
 
+      const baseATK = parseInt(overlay.querySelector('#editItemBaseATK').value) || 0;
+      const baseATK_SPEED = parseInt(overlay.querySelector('#editItemBaseAtkSpd').value) || 0;
+      const baseRange = parseInt(overlay.querySelector('#editItemBaseRange').value) || 0;
+      const baseDEF = parseInt(overlay.querySelector('#editItemBaseDEF').value) || 0;
+
       const saved = {
         id,
         name: overlay.querySelector('#editItemName').value.trim(),
@@ -300,9 +330,14 @@ export class ItemEditor {
         proficiencyBonus: parseInt(overlay.querySelector('#editItemProf').value) || 0,
         specialEffects: effects,
         icon: overlay.querySelector('#editItemIcon').value.trim(),
+        spriteKey: overlay.querySelector('#editItemSpriteKey').value.trim() || null,
         stackable: overlay.querySelector('#editItemStackable').checked,
         maxStack: parseInt(overlay.querySelector('#editItemMaxStack').value) || 1,
       };
+      if (baseATK) saved.baseATK = baseATK;
+      if (baseATK_SPEED) saved.baseATK_SPEED = baseATK_SPEED;
+      if (baseRange) saved.baseRange = baseRange;
+      if (baseDEF) saved.baseDEF = baseDEF;
 
       if (!isNew) delete this.dm.data.items[itemId]; // remove old key if id changed
       this.dm.data.items[id] = saved;

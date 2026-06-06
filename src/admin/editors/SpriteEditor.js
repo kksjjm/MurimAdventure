@@ -255,9 +255,9 @@ export class SpriteEditor {
         this.selectedSprite = SPRITE_REGISTRY.find(s => s.key === key);
         this.currentFrame = 0;
         this._stopAnimation();
-        this._loadSprite();
-        this._renderBrowser();
-        this._renderTools();
+        this._renderCenter();   // Rebuild canvas DOM first
+        this._renderBrowser();  // Update selection highlight
+        this._renderTools();    // Update tool panel
       });
     });
   }

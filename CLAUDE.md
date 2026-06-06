@@ -310,7 +310,7 @@ MurimAdventure/
 | Editor | 기능 |
 |--------|------|
 | Dashboard | 데이터 수량 현황 |
-| ItemEditor | 아이템 CRUD, 능력치 편집, 등급 필터, 프리뷰 카드 |
+| ItemEditor | 아이템 CRUD, 능력치 편집, 등급 필터, 프리뷰 카드, **스프라이트 키 연결**, baseATK/baseDEF 편집 |
 | SkillEditor | 스킬 CRUD, 카테고리별 분류, 스킬 합성 편집, 스킬 트리 시각화 |
 | MonsterEditor | 몬스터 CRUD, AI 설정, 드랍 테이블 편집 |
 | MapEditor | 캔버스 기반 타일맵 에디터, 3레이어, 페인트/지우기/채우기/스폰 도구 |
