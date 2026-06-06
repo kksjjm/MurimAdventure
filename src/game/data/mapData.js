@@ -14,7 +14,7 @@ const field_01 = {
   type: 'field',
   spawns: { player: { x: 25, y: 25 } },
   portals: [
-    { x: 25, y: 3, targetMap: 'village_01', targetX: 15, targetY: 25, label: '→ 무림촌' },
+    { x: 25, y: 3, targetMap: 'village_01', targetX: 15, targetY: 23, label: '→ 무림촌' },
     { x: 47, y: 25, targetMap: 'dark_forest', targetX: 5, targetY: 15, label: '→ 흑림' },
   ],
   monsterConfig: {
@@ -99,9 +99,9 @@ const village_01 = {
   width: 30,
   height: 30,
   type: 'village',
-  spawns: { player: { x: 15, y: 25 } },
+  spawns: { player: { x: 15, y: 23 } },
   portals: [
-    { x: 15, y: 29, targetMap: 'field_01', targetX: 25, targetY: 5, label: '→ 녹림 평원' },
+    { x: 15, y: 27, targetMap: 'field_01', targetX: 25, targetY: 5, label: '→ 녹림 평원' },
   ],
   monsterConfig: null, // No monsters in village
   tiles: village_01_tiles,
