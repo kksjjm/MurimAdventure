@@ -3,6 +3,7 @@
 // =============================================================================
 
 import Phaser from 'phaser';
+import CustomSpriteLoader from '../systems/CustomSpriteLoader.js';
 
 const CHAR_SIZE = 64;  // Character sprite size
 const TILE_SIZE = 32;  // Tile texture size
@@ -102,7 +103,10 @@ export default class BootScene extends Phaser.Scene {
     this._generateNPCSprites();
     this._generatePortalTexture();
 
-    this.scene.start('PreloadScene');
+    // Load custom sprites from localStorage (overrides defaults)
+    CustomSpriteLoader.loadIntoScene(this).then(() => {
+      this.scene.start('PreloadScene');
+    });
   }
 
   // ==========================================================================

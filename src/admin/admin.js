@@ -12,6 +12,7 @@ import { EventEditor } from './editors/EventEditor.js';
 import { MountPetEditor } from './editors/MountPetEditor.js';
 import { StatsConfigEditor } from './editors/StatsConfigEditor.js';
 import { GameSettingsEditor } from './editors/GameSettingsEditor.js';
+import { SpriteEditor } from './editors/SpriteEditor.js';
 
 // ---- Global toast helper ----
 window.showToast = function(message, type = 'info') {
@@ -46,6 +47,7 @@ class AdminApp {
       skills: new SkillEditor(this.dataManager),
       monsters: new MonsterEditor(this.dataManager),
       maps: new MapEditor(this.dataManager),
+      sprites: new SpriteEditor(this.dataManager),
       quests: new QuestEditor(this.dataManager),
       events: new EventEditor(this.dataManager),
       mounts: new MountPetEditor(this.dataManager),
