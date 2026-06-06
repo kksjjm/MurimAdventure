@@ -134,6 +134,8 @@ export class SpriteEditor {
     this.brushSize = 1;
     this.zoom = 8;
     this.showGrid = true;
+    this.showCharGuide = false;
+    this._charGuideImage = null;
     this.currentFrame = 0;
     this.isPlaying = false;
     this.animSpeed = 8;
@@ -443,12 +445,29 @@ export class SpriteEditor {
     html += '</div>';
 
     // Grid toggle
-    html += `<div style="margin-bottom:16px;">
+    html += `<div style="margin-bottom:8px;">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text-dim);">
         <input type="checkbox" id="sprGridToggle" ${this.showGrid ? 'checked' : ''}>
         그리드 표시
       </label>
     </div>`;
+
+    // Character guide toggle (only for equipment sprites)
+    if (this._isEquipmentSprite()) {
+      html += `<div style="margin-bottom:8px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#66ccff;">
+          <input type="checkbox" id="sprCharGuide" ${this.showCharGuide ? 'checked' : ''}>
+          캐릭터 가이드 표시
+        </label>
+      </div>`;
+      html += `<div style="font-size:10px;color:#888;margin-bottom:16px;line-height:1.4;">
+        <span style="color:#66ccff;">투구</span>: 상단 10~30%<br>
+        <span style="color:#66ccff;">갑옷</span>: 30~60%<br>
+        <span style="color:#66ccff;">허리</span>: 60~75%<br>
+        <span style="color:#66ccff;">신발</span>: 75% 이하<br>
+        <span style="color:#aaa;">캐릭터 위에 겹쳐 그리세요</span>
+      </div>`;
+    }
 
     // Undo/Redo
     html += '<div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:8px;">편집</div>';
@@ -503,6 +522,10 @@ export class SpriteEditor {
       this.showGrid = e.target.checked;
       this._redrawDisplay();
     });
+    document.getElementById('sprCharGuide')?.addEventListener('change', (e) => {
+      this.showCharGuide = e.target.checked;
+      this._redrawDisplay();
+    });
     document.getElementById('sprUndo')?.addEventListener('click', () => this._undo());
     document.getElementById('sprRedo')?.addEventListener('click', () => this._redo());
   }
@@ -511,9 +534,38 @@ export class SpriteEditor {
   // Sprite Loading
   // =========================================================================
 
+  _isEquipmentSprite() {
+    return this.selectedSprite && this.selectedSprite.category === '장비';
+  }
+
+  _loadCharGuide() {
+    // Load character idle_down sprite as guide overlay for equipment editing
+    this._charGuideImage = null;
+    const customs = this._getCustomSprites();
+    const guideSrc = customs['char_idle_down']
+      ? customs['char_idle_down'].dataUrl
+      : 'assets/char/Idle_Down.png';
+
+    const img = new Image();
+    img.onload = () => {
+      this._charGuideImage = img;
+      this._redrawDisplay();
+    };
+    img.src = guideSrc;
+  }
+
   _loadSprite() {
     if (!this.selectedSprite) return;
     const spr = this.selectedSprite;
+
+    // Load character guide for equipment sprites
+    if (this._isEquipmentSprite()) {
+      this.showCharGuide = true;
+      this._loadCharGuide();
+    } else {
+      this.showCharGuide = false;
+      this._charGuideImage = null;
+    }
     const customs = this._getCustomSprites();
 
     if (customs[spr.key]) {
@@ -605,6 +657,42 @@ export class SpriteEditor {
         this.displayCtx.fillStyle = (px + py) % 2 === 0 ? '#2a2a2a' : '#3a3a3a';
         this.displayCtx.fillRect(x, y, checkSize, checkSize);
       }
+    }
+
+    // Draw character guide overlay for equipment sprites
+    if (this._isEquipmentSprite() && this._charGuideImage && this.showCharGuide) {
+      this.displayCtx.globalAlpha = 0.3;
+      this.displayCtx.drawImage(
+        this._charGuideImage,
+        0, 0, spr.frameWidth, spr.frameHeight,
+        0, 0, dw, dh
+      );
+      this.displayCtx.globalAlpha = 1.0;
+
+      // Draw body region guides (head, torso, legs) as dotted lines
+      this.displayCtx.strokeStyle = 'rgba(0, 200, 255, 0.3)';
+      this.displayCtx.setLineDash([4, 4]);
+      this.displayCtx.lineWidth = 1;
+      // Head region ~row 6-20 (top quarter)
+      const headY = Math.round(spr.frameHeight * 0.1) * this.zoom;
+      const neckY = Math.round(spr.frameHeight * 0.3) * this.zoom;
+      const waistY = Math.round(spr.frameHeight * 0.6) * this.zoom;
+      const kneeY = Math.round(spr.frameHeight * 0.75) * this.zoom;
+      this.displayCtx.beginPath();
+      this.displayCtx.moveTo(0, headY); this.displayCtx.lineTo(dw, headY);
+      this.displayCtx.moveTo(0, neckY); this.displayCtx.lineTo(dw, neckY);
+      this.displayCtx.moveTo(0, waistY); this.displayCtx.lineTo(dw, waistY);
+      this.displayCtx.moveTo(0, kneeY); this.displayCtx.lineTo(dw, kneeY);
+      this.displayCtx.stroke();
+      this.displayCtx.setLineDash([]);
+
+      // Region labels
+      this.displayCtx.fillStyle = 'rgba(0, 200, 255, 0.5)';
+      this.displayCtx.font = '10px monospace';
+      this.displayCtx.fillText('투구', 2, headY + 12);
+      this.displayCtx.fillText('갑옷', 2, neckY + 12);
+      this.displayCtx.fillText('허리', 2, waistY + 12);
+      this.displayCtx.fillText('신발', 2, kneeY + 12);
     }
 
     // Draw sprite scaled

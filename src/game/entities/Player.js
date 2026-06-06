@@ -130,7 +130,19 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   // ==========================================================================
-  // Equipment Visual Layer System
+  // Equipment Visual Layer System (Frame-Synced)
+  //
+  // Equipment sprites can be:
+  // 1. Static (single 64x64 image) - legacy, positioned on character
+  // 2. Animated spritesheet - same frame count as character animations,
+  //    synced frame-by-frame (e.g. equip_weapon_sword_idle_down has 4 frames
+  //    matching char_idle_down's 4 frames)
+  //
+  // Naming convention for animated equipment sprites:
+  //   {equipTextureKey}_{animType}_{direction}
+  //   e.g. equip_weapon_sword_idle_down, equip_armor_iron_walk_side
+  //
+  // If animated version doesn't exist, falls back to static overlay.
   // ==========================================================================
 
   _updateEquipmentVisuals() {
@@ -142,42 +154,46 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
     this.equipLayers = {};
 
-    // Layer order (back to front)
+    // Layer order (back to front): slot + default texture keys
     const layerOrder = [
-      { slot: 'TALISMAN', textures: ['equip_talisman'] },
-      { slot: 'SHOES', textures: ['equip_shoes_basic'] },
-      { slot: 'ARMOR', textures: ['equip_armor_leather', 'equip_armor_iron'] },
-      { slot: 'BELT', textures: ['equip_belt_fancy'] },
-      { slot: 'GLOVES', textures: ['equip_gloves_basic'] },
-      { slot: 'NECKLACE', textures: ['equip_necklace'] },
-      { slot: 'HELMET', textures: ['equip_helmet_basic', 'equip_helmet_crown'] },
-      { slot: 'SHIELD', textures: ['equip_shield'] },
-      { slot: 'WEAPON', textures: null },  // special handling
+      { slot: 'TALISMAN',  texKey: 'equip_talisman',       depthOff: 0 },
+      { slot: 'SHOES',     texKey: 'equip_shoes_basic',    depthOff: 0 },
+      { slot: 'ARMOR',     texKey: 'equip_armor_leather',  depthOff: 1 },
+      { slot: 'BELT',      texKey: 'equip_belt_fancy',     depthOff: 2 },
+      { slot: 'GLOVES',    texKey: 'equip_gloves_basic',   depthOff: 2 },
+      { slot: 'NECKLACE',  texKey: 'equip_necklace',       depthOff: 2 },
+      { slot: 'HELMET',    texKey: 'equip_helmet_basic',   depthOff: 3 },
+      { slot: 'SHIELD',    texKey: 'equip_shield',         depthOff: 1 },
+      { slot: 'WEAPON',    texKey: null,                   depthOff: 4 },
     ];
 
     for (const layer of layerOrder) {
       const equipped = this.equipment[layer.slot];
       if (!equipped) continue;
 
-      let textureKey;
-
+      // Determine base texture key
+      let baseTexKey;
       if (layer.slot === 'WEAPON') {
-        textureKey = WEAPON_TYPE_SPRITE_MAP[equipped.weaponType]
+        baseTexKey = WEAPON_TYPE_SPRITE_MAP[equipped.weaponType]
           || WEAPON_GRIP_SPRITE_MAP[equipped.weaponGrip]
           || 'equip_weapon_sword';
-      } else if (layer.textures) {
-        // Pick texture based on rarity
-        const rIdx = ['COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY', 'MYTHIC'];
-        const rarityIdx = rIdx.indexOf(equipped.rarity || 'COMMON');
-        textureKey = rarityIdx >= 3 && layer.textures.length > 1
-          ? layer.textures[1]
-          : layer.textures[0];
+      } else {
+        // Use item-specific sprite key if defined, else default
+        baseTexKey = equipped.spriteKey || layer.texKey;
       }
 
-      if (!textureKey || !this.scene.textures.exists(textureKey)) continue;
+      if (!baseTexKey) continue;
 
-      const sprite = this.scene.add.sprite(this.x, this.y, textureKey);
-      sprite.setDepth(this.depth + 1);
+      // Try to find the texture (static fallback)
+      const staticExists = this.scene.textures.exists(baseTexKey);
+      if (!staticExists) continue;
+
+      const sprite = this.scene.add.sprite(this.x, this.y, baseTexKey);
+      sprite.setDepth(this.depth + layer.depthOff);
+
+      // Store the base key for animation sync lookup
+      sprite.setData('baseTexKey', baseTexKey);
+      sprite.setData('slot', layer.slot);
 
       // Apply rarity tint
       const tint = RARITY_TINT[equipped.rarity];
@@ -191,12 +207,55 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   _syncEquipmentLayerPositions() {
+    if (!this.anims || !this.anims.currentAnim) {
+      // No animation playing - just sync position
+      for (const key of Object.keys(this.equipLayers)) {
+        const sprite = this.equipLayers[key];
+        if (sprite && sprite.active) {
+          sprite.setPosition(this.x, this.y);
+          sprite.setDepth(this.depth + 1);
+          sprite.setFlipX(this.flipX);
+        }
+      }
+      return;
+    }
+
+    // Get current character animation state
+    const currentAnimKey = this.anims.currentAnim.key; // e.g. 'player_idle_down'
+    const currentFrame = this.anims.currentFrame ? this.anims.currentFrame.index : 0;
+
+    // Parse animation type and direction from key
+    // Format: player_{type}_{direction} → type=idle/walk/attack, dir=down/side/up
+    const parts = currentAnimKey.split('_');
+    const animType = parts[1] || 'idle'; // idle, walk, attack, hit, death, run
+    const animDir = parts[2] || 'down';  // down, side, up
+
     for (const key of Object.keys(this.equipLayers)) {
       const sprite = this.equipLayers[key];
-      if (sprite && sprite.active) {
-        sprite.setPosition(this.x, this.y);
-        sprite.setDepth(this.depth + 1);
-        sprite.setFlipX(this.flipX);
+      if (!sprite || !sprite.active) continue;
+
+      sprite.setPosition(this.x, this.y);
+      sprite.setFlipX(this.flipX);
+      sprite.setDepth(this.depth + (sprite.getData('depthOff') || 1));
+
+      const baseTexKey = sprite.getData('baseTexKey');
+      if (!baseTexKey) continue;
+
+      // Try animated equipment texture: {baseTexKey}_{animType}_{direction}
+      const animEquipKey = `${baseTexKey}_${animType}_${animDir}`;
+      if (this.scene.textures.exists(animEquipKey)) {
+        // Animated equipment - sync frame with character
+        const tex = this.scene.textures.get(animEquipKey);
+        const frameCount = tex.frameTotal - 1; // exclude __BASE
+        if (frameCount > 0) {
+          const frameIdx = Math.min(currentFrame, frameCount - 1);
+          sprite.setTexture(animEquipKey, frameIdx);
+        }
+      } else {
+        // Static equipment - just ensure correct texture and flip
+        if (sprite.texture.key !== baseTexKey) {
+          sprite.setTexture(baseTexKey);
+        }
       }
     }
   }
