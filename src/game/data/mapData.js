@@ -241,4 +241,8 @@ export function getMapData(mapId) {
   return MAP_DATA[mapId] || null;
 }
 
+export function getAllMaps() {
+  return Object.values(MAP_DATA);
+}
+
 export default MAP_DATA;

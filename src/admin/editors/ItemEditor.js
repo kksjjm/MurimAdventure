@@ -197,8 +197,13 @@ export class ItemEditor {
               </div>
               <div class="form-group">
                 <label>스프라이트 키</label>
-                <input type="text" id="editItemSpriteKey" value="${item.spriteKey || ''}" placeholder="equip_weapon_sword">
-                <small style="color:var(--text-dim);font-size:10px;">장비 착용 시 캐릭터에 표시될 스프라이트</small>
+                <div style="position:relative;">
+                  <input type="text" id="editItemSpriteKey" value="${item.spriteKey || ''}" placeholder="검색 또는 직접 입력..." autocomplete="off">
+                  <div id="spriteDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;max-height:200px;overflow-y:auto;background:var(--bg-card);border:1px solid var(--border);border-radius:4px;z-index:100;"></div>
+                </div>
+                <div id="spritePreviewBox" style="margin-top:6px;min-height:40px;display:flex;align-items:center;gap:8px;">
+                  ${item.spriteKey ? `<span style="color:var(--text-dim);font-size:11px;">미리보기 로딩 중...</span>` : '<span style="color:var(--text-dim);font-size:10px;">장비 착용 시 캐릭터에 표시될 스프라이트</span>'}
+                </div>
               </div>
             </div>
             <div class="form-row">
@@ -275,6 +280,9 @@ export class ItemEditor {
       this._bindEffectRemove(overlay);
     };
     this._bindEffectRemove(overlay);
+
+    // Sprite key dropdown + preview
+    this._initSpriteSelector(overlay);
 
     // Live preview update
     const updatePreviewFromForm = () => {
@@ -367,6 +375,159 @@ export class ItemEditor {
     overlay.querySelectorAll('.remove-effect-btn').forEach(btn => {
       btn.onclick = () => btn.closest('.kv-row').remove();
     });
+  }
+
+  // =========================================================================
+  // Sprite Key Selector (Dropdown + Search + Preview)
+  // =========================================================================
+
+  _getSpriteKeys() {
+    // All equipment/icon sprite keys
+    const builtIn = [
+      'equip_weapon_sword', 'equip_weapon_spear', 'equip_weapon_dual', 'equip_weapon_staff',
+      'equip_helmet_basic', 'equip_helmet_crown',
+      'equip_armor_leather', 'equip_armor_iron',
+      'equip_shield', 'equip_gloves_basic', 'equip_shoes_basic',
+      'equip_belt_fancy', 'equip_necklace', 'equip_talisman',
+      'icon_sword', 'icon_staff', 'icon_armor', 'icon_potion',
+    ];
+    // Add custom sprites from localStorage
+    try {
+      const customs = JSON.parse(localStorage.getItem('murimAdventure_customSprites') || '{}');
+      for (const key of Object.keys(customs)) {
+        if (!builtIn.includes(key)) builtIn.push(key);
+      }
+    } catch {}
+    return builtIn;
+  }
+
+  _initSpriteSelector(overlay) {
+    const input = overlay.querySelector('#editItemSpriteKey');
+    const dropdown = overlay.querySelector('#spriteDropdown');
+    const previewBox = overlay.querySelector('#spritePreviewBox');
+    if (!input || !dropdown) return;
+
+    const allKeys = this._getSpriteKeys();
+
+    const showDropdown = (filter) => {
+      const term = (filter || '').toLowerCase();
+      const filtered = term ? allKeys.filter(k => k.toLowerCase().includes(term)) : allKeys;
+      if (filtered.length === 0) {
+        dropdown.style.display = 'none';
+        return;
+      }
+      dropdown.style.display = 'block';
+      dropdown.innerHTML = filtered.map(k =>
+        `<div class="spr-dd-item" data-key="${k}" style="padding:6px 10px;cursor:pointer;font-size:12px;color:var(--text);display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);">
+          <canvas class="spr-dd-thumb" data-key="${k}" width="24" height="24" style="image-rendering:pixelated;background:#222;border-radius:2px;flex-shrink:0;"></canvas>
+          <span>${k}</span>
+        </div>`
+      ).join('');
+
+      // Load thumbnails
+      dropdown.querySelectorAll('.spr-dd-thumb').forEach(canvas => {
+        this._drawSpriteThumb(canvas, canvas.dataset.key);
+      });
+
+      // Click to select
+      dropdown.querySelectorAll('.spr-dd-item').forEach(el => {
+        el.addEventListener('click', () => {
+          input.value = el.dataset.key;
+          dropdown.style.display = 'none';
+          this._updateSpritePreview(previewBox, el.dataset.key);
+        });
+        el.addEventListener('mouseenter', () => { el.style.background = 'var(--bg-hover)'; });
+        el.addEventListener('mouseleave', () => { el.style.background = ''; });
+      });
+    };
+
+    // Events
+    input.addEventListener('focus', () => showDropdown(input.value));
+    input.addEventListener('input', () => showDropdown(input.value));
+    input.addEventListener('blur', () => {
+      setTimeout(() => { dropdown.style.display = 'none'; }, 200);
+    });
+
+    // Initial preview
+    if (input.value) {
+      this._updateSpritePreview(previewBox, input.value);
+    }
+  }
+
+  _drawSpriteThumb(canvas, spriteKey) {
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    // Try custom sprite first
+    try {
+      const customs = JSON.parse(localStorage.getItem('murimAdventure_customSprites') || '{}');
+      if (customs[spriteKey]) {
+        const img = new Image();
+        img.onload = () => {
+          const fw = customs[spriteKey].frameWidth || img.width;
+          const fh = customs[spriteKey].frameHeight || img.height;
+          ctx.drawImage(img, 0, 0, fw, fh, 0, 0, 24, 24);
+        };
+        img.src = customs[spriteKey].dataUrl;
+        return;
+      }
+    } catch {}
+
+    // Fallback: draw colored placeholder
+    const colors = {
+      'equip_weapon_sword': '#ccccdd', 'equip_weapon_spear': '#886644', 'equip_weapon_dual': '#ccccdd',
+      'equip_weapon_staff': '#775533', 'equip_helmet_basic': '#888899', 'equip_helmet_crown': '#ccaa33',
+      'equip_armor_leather': '#8B6914', 'equip_armor_iron': '#888899', 'equip_shield': '#885533',
+      'equip_gloves_basic': '#885533', 'equip_shoes_basic': '#664422', 'equip_belt_fancy': '#cc3333',
+      'equip_necklace': '#ccaa33', 'equip_talisman': '#eeee88',
+      'icon_sword': '#ccccdd', 'icon_staff': '#886644', 'icon_armor': '#888899', 'icon_potion': '#cc3333',
+    };
+    ctx.fillStyle = colors[spriteKey] || '#666';
+    ctx.fillRect(4, 4, 16, 16);
+    ctx.fillStyle = '#fff';
+    ctx.font = '8px monospace';
+    ctx.fillText(spriteKey.slice(0, 3), 2, 22);
+  }
+
+  _updateSpritePreview(container, spriteKey) {
+    if (!container) return;
+    if (!spriteKey) {
+      container.innerHTML = '<span style="color:var(--text-dim);font-size:10px;">스프라이트 미선택</span>';
+      return;
+    }
+
+    container.innerHTML = `
+      <canvas id="sprPreviewCanvas" width="48" height="48" style="image-rendering:pixelated;background:#1a1a2e;border:1px solid var(--border);border-radius:4px;"></canvas>
+      <span style="color:var(--text-dim);font-size:11px;">${spriteKey}</span>
+    `;
+
+    const canvas = container.querySelector('#sprPreviewCanvas');
+    if (canvas) {
+      const pctx = canvas.getContext('2d');
+      pctx.imageSmoothingEnabled = false;
+
+      // Try custom
+      try {
+        const customs = JSON.parse(localStorage.getItem('murimAdventure_customSprites') || '{}');
+        if (customs[spriteKey]) {
+          const img = new Image();
+          img.onload = () => {
+            const fw = customs[spriteKey].frameWidth || img.width;
+            const fh = customs[spriteKey].frameHeight || img.height;
+            pctx.drawImage(img, 0, 0, fw, fh, 0, 0, 48, 48);
+          };
+          img.src = customs[spriteKey].dataUrl;
+          return;
+        }
+      } catch {}
+
+      // Placeholder
+      pctx.fillStyle = '#444';
+      pctx.fillRect(8, 8, 32, 32);
+      pctx.fillStyle = '#aaa';
+      pctx.font = '10px monospace';
+      pctx.fillText(spriteKey.split('_').pop(), 4, 30);
+    }
   }
 
   _updatePreview(overlay, item) {

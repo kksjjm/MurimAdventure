@@ -2,6 +2,8 @@
 // MapEditor - 맵 에디터
 // =============================================================================
 
+import { getAllMaps } from '../../game/data/mapData.js';
+
 const TILE_TYPES = {
   0:  { name: '빈칸',   color: '#111111' },
   1:  { name: '잔디',   color: '#2d5a1e' },
@@ -63,6 +65,7 @@ export class MapEditor {
         <h2>맵 에디터 <small>Map Editor</small></h2>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-primary" id="addMapBtn">+ 새 맵</button>
+          <button class="btn btn-secondary" id="importGameMapBtn">게임 맵 불러오기</button>
           <button class="btn btn-success" id="saveMapBtn">맵 저장</button>
         </div>
       </div>
@@ -147,6 +150,7 @@ export class MapEditor {
     container.querySelector('#zoomOutBtn').onclick = () => { this.zoom = Math.max(0.25, this.zoom - 0.25); this.render(container); };
 
     container.querySelector('#addMapBtn').onclick = () => this.addMap(container);
+    container.querySelector('#importGameMapBtn').onclick = () => this._importGameMap(container);
     container.querySelector('#saveMapBtn').onclick = () => { this.dm.save(); window.showToast('맵이 저장되었습니다.', 'success'); };
     container.querySelector('#deleteMapBtn')?.addEventListener('click', () => {
       if (confirm('이 맵을 삭제하시겠습니까?')) {
@@ -347,6 +351,125 @@ export class MapEditor {
     ctx.strokeStyle = this.currentLayer === 'collision' ? 'rgba(255,0,0,0.5)' : 'rgba(212,168,67,0.3)';
     ctx.lineWidth = 2;
     ctx.strokeRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+
+  _importGameMap(container) {
+    let gameMaps;
+    try {
+      gameMaps = getAllMaps();
+    } catch {
+      window.showToast('게임 맵 데이터를 불러올 수 없습니다.', 'error');
+      return;
+    }
+
+    const mapsWithTiles = gameMaps.filter(m => m.tiles && Array.isArray(m.tiles));
+    if (mapsWithTiles.length === 0) {
+      window.showToast('타일 데이터가 있는 맵이 없습니다.', 'error');
+      return;
+    }
+
+    // Show selection dialog
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+          <h3>게임 맵 불러오기</h3>
+          <button class="btn btn-secondary btn-small modal-close-btn">X</button>
+        </div>
+        <div class="modal-body">
+          <p style="color:var(--text-dim);font-size:12px;margin-bottom:12px;">불러올 맵을 선택하세요. 기존 에디터에 추가됩니다.</p>
+          ${gameMaps.map(m => `
+            <div class="game-map-item" data-id="${m.id}" style="padding:10px;margin-bottom:6px;background:var(--bg-panel);border:1px solid var(--border);border-radius:4px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <div style="font-weight:700;color:var(--text);">${m.nameKo || m.id}</div>
+                <div style="font-size:11px;color:var(--text-dim);">${m.width}x${m.height} ${m.tiles ? '(타일 데이터 있음)' : '(절차적 생성)'}</div>
+              </div>
+              <button class="btn btn-primary btn-small import-map-btn" data-id="${m.id}">불러오기</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('.modal-close-btn').forEach(b => b.onclick = () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    overlay.querySelectorAll('.import-map-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mapId = btn.dataset.id;
+        const gameMap = gameMaps.find(m => m.id === mapId);
+        if (!gameMap) return;
+
+        // Convert game map tiles (2D array) → editor format (1D layers)
+        // Game tiles: 0=grass,1=dirt,2=stone,3=water,4=wall,5=tree
+        // Editor tiles: 0=blank,1=grass,2=dirt,3=stone,4=water,5=wall,6=tree
+        const gameTileToEditor = { 0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6 };
+        const w = gameMap.width;
+        const h = gameMap.height;
+        const ground = new Array(w * h).fill(0);
+
+        if (gameMap.tiles) {
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+              const gameTile = gameMap.tiles[y] ? gameMap.tiles[y][x] : 0;
+              ground[y * w + x] = gameTileToEditor[gameTile] !== undefined ? gameTileToEditor[gameTile] : gameTile;
+            }
+          }
+        }
+
+        // Build collision layer from wall/tree/water tiles
+        const collision = new Array(w * h).fill(0);
+        for (let i = 0; i < ground.length; i++) {
+          if (ground[i] === 4 || ground[i] === 5 || ground[i] === 6) collision[i] = 1;
+        }
+
+        const editorMap = {
+          id: gameMap.id,
+          name: gameMap.nameKo || gameMap.id,
+          width: w,
+          height: h,
+          tileSize: 32,
+          layers: {
+            ground,
+            objects: new Array(w * h).fill(0),
+            collision,
+          },
+          spawnPoints: {
+            player: gameMap.spawns ? { x: gameMap.spawns.player.x, y: gameMap.spawns.player.y } : { x: 1, y: 1 },
+            monsters: [],
+            npcs: gameMap.npcs ? gameMap.npcs.map(n => ({ x: n.tileX, y: n.tileY, id: n.id })) : [],
+            items: [],
+          },
+        };
+
+        // Add portals as items
+        if (gameMap.portals) {
+          editorMap.spawnPoints.items = gameMap.portals.map(p => ({
+            x: p.x, y: p.y, label: p.label, targetMap: p.targetMap,
+          }));
+        }
+
+        if (!this.dm.data.maps) this.dm.data.maps = [];
+
+        // Check if already exists
+        const existIdx = this.dm.data.maps.findIndex(m => m.id === editorMap.id);
+        if (existIdx >= 0) {
+          if (!confirm(`맵 "${editorMap.name}"이(가) 이미 존재합니다. 덮어쓰시겠습니까?`)) return;
+          this.dm.data.maps[existIdx] = editorMap;
+          this.currentMapIdx = existIdx;
+        } else {
+          this.dm.data.maps.push(editorMap);
+          this.currentMapIdx = this.dm.data.maps.length - 1;
+        }
+
+        this.dm.save();
+        overlay.remove();
+        this.render(container);
+        window.showToast(`맵 "${editorMap.name}" 불러오기 완료!`, 'success');
+      });
+    });
   }
 
   addMap(container) {

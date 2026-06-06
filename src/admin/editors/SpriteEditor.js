@@ -170,6 +170,7 @@ export class SpriteEditor {
     header.className = 'section-header';
     header.innerHTML = `<h2>스프라이트 에디터 <small>Sprite Editor</small></h2>
       <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-small" id="sprCreateNew">+ 새 스프라이트</button>
         <button class="btn btn-secondary btn-small" id="sprExportAll">모두 내보내기</button>
         <button class="btn btn-secondary btn-small" id="sprImportAll">가져오기</button>
       </div>`;
@@ -201,7 +202,8 @@ export class SpriteEditor {
     this._renderCenter();
     this._renderTools();
 
-    // Bind export/import
+    // Bind header buttons
+    document.getElementById('sprCreateNew').addEventListener('click', () => this._createNewSprite());
     document.getElementById('sprExportAll').addEventListener('click', () => this._exportAll());
     document.getElementById('sprImportAll').addEventListener('click', () => this._importAll());
 
@@ -219,6 +221,28 @@ export class SpriteEditor {
     const browser = document.getElementById('sprBrowser');
     if (!browser) return;
     const customSprites = this._getCustomSprites();
+
+    // Add custom sprites not in registry
+    for (const key of Object.keys(customSprites)) {
+      if (!SPRITE_REGISTRY.find(s => s.key === key)) {
+        const data = customSprites[key];
+        SPRITE_REGISTRY.push({
+          key,
+          category: '커스텀',
+          name: key,
+          path: null,
+          frameWidth: data.frameWidth || data.width || 64,
+          frameHeight: data.frameHeight || data.height || 64,
+          frames: data.frameWidth ? Math.max(1, Math.floor(data.width / data.frameWidth)) : 1,
+          type: (data.frameWidth && data.width > data.frameWidth) ? 'spritesheet' : 'static',
+          isCustom: true,
+        });
+      }
+    }
+    // Ensure 커스텀 category is listed
+    if (!CATEGORIES.includes('커스텀') && SPRITE_REGISTRY.some(s => s.category === '커스텀')) {
+      CATEGORIES.push('커스텀');
+    }
 
     let html = '<div style="font-size:12px;color:var(--gold);font-weight:700;margin-bottom:8px;padding:4px;">카테고리</div>';
 
@@ -1177,5 +1201,155 @@ export class SpriteEditor {
 
   _addRecentColor(color) {
     this.recentColors = [color, ...this.recentColors.filter(c => c !== color)].slice(0, 12);
+  }
+
+  // =========================================================================
+  // Create New Sprite
+  // =========================================================================
+
+  _createNewSprite() {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+          <h3>새 스프라이트 생성</h3>
+          <button class="btn btn-secondary btn-small modal-close-btn">X</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>스프라이트 이름 (= 파일명, 영문)</label>
+            <input type="text" id="newSprName" placeholder="예: equip_weapon_katana" style="width:100%;">
+            <small style="color:var(--text-dim);font-size:10px;">게임에서 사용될 키 이름. 영문, 밑줄(_) 사용</small>
+          </div>
+          <div class="form-group">
+            <label>카테고리</label>
+            <select id="newSprCategory" style="width:100%;">
+              ${CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-row" style="display:flex;gap:10px;">
+            <div class="form-group" style="flex:1;">
+              <label>프레임 너비 (px)</label>
+              <input type="number" id="newSprFrameW" value="64" min="8" max="256">
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label>프레임 높이 (px)</label>
+              <input type="number" id="newSprFrameH" value="64" min="8" max="256">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>프레임 수 (1 = 정적 이미지)</label>
+            <input type="number" id="newSprFrames" value="1" min="1" max="32">
+          </div>
+          <div class="form-group">
+            <label>PNG 업로드 (선택사항)</label>
+            <input type="file" id="newSprFile" accept=".png,image/png">
+            <small style="color:var(--text-dim);font-size:10px;">비워두면 빈 캔버스로 시작</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary modal-close-btn">취소</button>
+          <button class="btn btn-primary" id="createSprBtn">생성</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('.modal-close-btn').forEach(b => b.onclick = () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    overlay.querySelector('#createSprBtn').addEventListener('click', () => {
+      const name = overlay.querySelector('#newSprName').value.trim();
+      if (!name) { window.showToast('이름을 입력해주세요.', 'error'); return; }
+      if (!/^[a-zA-Z0-9_]+$/.test(name)) { window.showToast('영문, 숫자, 밑줄(_)만 사용 가능합니다.', 'error'); return; }
+
+      // Check duplicate
+      if (SPRITE_REGISTRY.find(s => s.key === name)) {
+        window.showToast('이미 존재하는 키입니다.', 'error');
+        return;
+      }
+
+      const category = overlay.querySelector('#newSprCategory').value;
+      const frameW = parseInt(overlay.querySelector('#newSprFrameW').value) || 64;
+      const frameH = parseInt(overlay.querySelector('#newSprFrameH').value) || 64;
+      const frames = parseInt(overlay.querySelector('#newSprFrames').value) || 1;
+      const type = frames > 1 ? 'spritesheet' : 'static';
+
+      // Add to registry
+      const newEntry = {
+        key: name,
+        category,
+        name,
+        path: null,
+        frameWidth: frameW,
+        frameHeight: frameH,
+        frames,
+        type,
+        isCustom: true,
+      };
+      SPRITE_REGISTRY.push(newEntry);
+
+      // Handle file upload or blank canvas
+      const file = overlay.querySelector('#newSprFile').files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+
+            const customs = this._getCustomSprites();
+            customs[name] = {
+              dataUrl: canvas.toDataURL('image/png'),
+              width: img.width,
+              height: img.height,
+              frameWidth: frameW,
+              frameHeight: frameH,
+            };
+            localStorage.setItem(CUSTOM_SPRITES_KEY, JSON.stringify(customs));
+
+            this.selectedSprite = newEntry;
+            this.expandedCategories[category] = true;
+            overlay.remove();
+            this._renderBrowser();
+            this._renderCenter();
+            this._renderTools();
+            window.showToast(`스프라이트 "${name}" 생성 완료!`, 'success');
+          };
+          img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      } else {
+        // Blank canvas
+        const w = frameW * frames;
+        const h = frameH;
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+
+        const customs = this._getCustomSprites();
+        customs[name] = {
+          dataUrl: canvas.toDataURL('image/png'),
+          width: w,
+          height: h,
+          frameWidth: frameW,
+          frameHeight: frameH,
+        };
+        localStorage.setItem(CUSTOM_SPRITES_KEY, JSON.stringify(customs));
+
+        this.selectedSprite = newEntry;
+        this.expandedCategories[category] = true;
+        overlay.remove();
+        this._renderBrowser();
+        this._renderCenter();
+        this._renderTools();
+        window.showToast(`스프라이트 "${name}" 생성 완료 (빈 캔버스)!`, 'success');
+      }
+    });
   }
 }

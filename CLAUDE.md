@@ -310,17 +310,17 @@ MurimAdventure/
 | Editor | 기능 |
 |--------|------|
 | Dashboard | 데이터 수량 현황 |
-| ItemEditor | 아이템 CRUD, 능력치 편집, 등급 필터, 프리뷰 카드, **스프라이트 키 연결**, baseATK/baseDEF 편집 |
+| ItemEditor | 아이템 CRUD, 능력치 편집, 등급 필터, 프리뷰 카드, **스프라이트 드롭다운 검색 + 미리보기**, baseATK/baseDEF 편집 |
 | SkillEditor | 스킬 CRUD, 카테고리별 분류, 스킬 합성 편집, 스킬 트리 시각화 |
 | MonsterEditor | 몬스터 CRUD, AI 설정, 드랍 테이블 편집 |
-| MapEditor | 캔버스 기반 타일맵 에디터, 3레이어, 페인트/지우기/채우기/스폰 도구 |
+| MapEditor | 캔버스 기반 타일맵 에디터, 3레이어, 페인트/지우기/채우기/스폰 도구, **게임 맵 불러오기** (mapData.js에서 변환) |
 | QuestEditor | 퀘스트 체인 편집, 목표/보상/대화 관리 |
 | EventEditor | 예약 이벤트, 보너스 설정 |
 | MountPetEditor | 탈것/환수 관리, 성장/진화 시스템 |
 | StatsConfigEditor | 레벨업 성장률, 전투 공식 계수, 경험치 커브 |
 | GameSettingsEditor | 게임 전역 설정, 기능 토글 |
 | DataManager | JSON 내보내기/가져오기, 백업/복원 |
-| SpriteEditor | 79종 스프라이트 브라우저, 픽셀아트 에디터 (연필/지우개/채우기/스포이드/선/사각형), PNG 업로드/다운로드, 스프라이트시트 프레임 편집, 애니메이션 미리보기, Undo/Redo, **장비 편집 시 캐릭터 가이드 오버레이** (투구/갑옷/허리/신발 영역 표시), 커스텀 스프라이트 저장 |
+| SpriteEditor | 79+종 스프라이트 브라우저, **새 스프라이트 생성** (이름=파일명, PNG 업로드/빈 캔버스), 픽셀아트 에디터, 장비 편집 시 캐릭터 가이드, 커스텀 스프라이트 저장/내보내기/가져오기 |
 
 ---
 
