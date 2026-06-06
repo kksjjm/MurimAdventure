@@ -140,10 +140,10 @@ MurimAdventure/
 ## Data Architecture
 
 ### constants.js - Game Enums
-- `STATS` (20종): HP, MP, STR, AGI, INT, LUK, DEF, ATK, EVASION, ACCURACY, CRIT_RATE, CRIT_DMG, SPIRIT, ITEM_FIND, MOVE_SPEED, ATK_SPEED, HP_REGEN, MP_REGEN, DMG_BONUS(피해증가%), DMG_TAKEN(받는피해증감%)
-- `WEAPON_GRIP` (3종): ONE_HANDED(한손), TWO_HANDED(양손), DUAL_WIELD(쌍수) - 그립 유형 (방패 호환 결정)
-- `WEAPON_TYPES` (8종 무기 분류): SWORD(검), BLADE(도), SPEAR(창), STAFF(봉), HIDDEN(암기), WHIP(편), FIST(권), EXOTIC(기문병기) - 숙련도 카테고리
-- `ITEM_RARITY` (14등급): GRADE_0(창세) ~ GRADE_13(하품), 숫자 낮을수록 강력
+- `STATS` (20종): HP, MP, STR, AGI, INT, LUK, DEF, ATK, EVASION, ACCURACY, CRIT_RATE, CRIT_DMG, SPIRIT, ITEM_FIND, MOVE_SPEED, ATK_SPEED, HP_REGEN, MP_REGEN, DMG_BONUS(가하는피해%), DMG_TAKEN(받는피해%)
+- `WEAPON_GRIP` (3종): ONE_HANDED(한손), TWO_HANDED(양손), DUAL_WIELD(쌍수) - 방패 호환 결정
+- `WEAPON_TYPES` (8종): SWORD(검), BLADE(도), SPEAR(창), STAFF(봉), HIDDEN(암기), WHIP(편), FIST(권), EXOTIC(기문병기) - 숙련도 카테고리
+- `ITEM_RARITY` (14등급, 0~13): GRADE_0(창세) ~ GRADE_13(하품), 숫자 낮을수록 강력
 - `EQUIPMENT_SLOTS` (13종): WEAPON, SHIELD, HELMET, ARMOR, PANTS, SHOES, GLOVES, BELT, RING_RIGHT, RING_LEFT, NECKLACE, TALISMAN, JADE_TOKEN
 - `WEAPON_TYPES`: ONE_HANDED, TWO_HANDED, DUAL_WIELD
 - `SKILL_CATEGORIES`: SIMBEOP(심법), MUGONG(무공), GYEONGGONG(경공), JUSUL(주술)
@@ -325,36 +325,37 @@ MurimAdventure/
 
 ### Completed
 - [x] 프로젝트 구조 및 빌드 시스템 (Vite + Phaser 3)
-- [x] 게임 데이터 모델 (상수 18종 스탯, 샘플 데이터, 밸런스 공식)
-- [x] 프로그래밍 방식 64x64 고해상도 스프라이트 생성 (캐릭터/몬스터/NPC/장비)
-- [x] 장비 시각 표시 레이어 시스템 (등급별 틴트)
-- [x] 4방향 이동 (WASD/방향키) + 방향 바라보기
-- [x] 스페이스바 기본공격 (방향 기반 자동 타겟팅, 돌진 애니메이션)
+- [x] 게임 데이터 모델 (20종 스탯, 14등급 아이템, 8종 무기분류)
+- [x] **실제 스프라이트 에셋** 적용 (Pixel Crawler Free Pack)
+  - 캐릭터 애니메이션: Idle/Walk/Run/Slice/Hit/Death × 3방향 (18장)
+  - 몬스터 애니메이션: Orc 4종 + Skeleton 4종 × Idle/Run/Death (24장)
+- [x] 프로그래밍 방식 텍스처 (NPC/장비레이어/이펙트/UI) - 폴백
+- [x] 장비 시각 표시 레이어 시스템 (14등급별 틴트)
+- [x] 4방향 이동 + 방향별 걷기/대기 애니메이션 자동 전환
+- [x] 스페이스바 기본공격 (Slice 애니메이션 + 돌진)
 - [x] 임팩트 이펙트 시스템 (기본공격/스킬/버프/피격, 9종 이펙트)
-- [x] 전투 시스템 (데미지/명중/크리티컬 계산)
-- [x] 숙련도 시스템 (무기/스킬 7단계)
+- [x] 전투 시스템 (데미지/명중/크리티컬 + 무기숙련도 보너스 + DMG_BONUS/DMG_TAKEN)
+- [x] 무기 8종 분류별 숙련도 (7단계, 피해/공속/크리율/크리뎀 보너스)
 - [x] 스킬 합성 시스템
-- [x] 스킬 쿨다운 + 지속시간 시스템 (UI 게이지 표시)
-- [x] 채널링 스킬 시스템 (운기조식 - 초당 10% MP 회복)
+- [x] 스킬 쿨다운 + 지속시간 + 채널링 시스템 (운기조식)
 - [x] HP_REGEN / MP_REGEN 능력치 기반 자동 회복
-- [x] 몬스터 AI (대기/배회/추적/공격, 4방향 이동)
+- [x] 스킬 사용 불가 사유 표시 (쿨타임/내력부족)
+- [x] 몬스터 AI (대기/배회/추적/공격) + 상태별 애니메이션
 - [x] 플레이어 ↔ 몬스터 ↔ NPC 충돌 시스템
 - [x] HUD (HP/MP/EXP 바, 스킬 슬롯 쿨다운/지속시간, 메뉴 버튼)
-- [x] 인벤토리/장비/스킬/캐릭터 정보 패널 (호버 툴팁)
-- [x] 아이템 드랍 및 픽업
+- [x] 인벤토리/장비/스킬/캐릭터 정보 패널 (호버 툴팁, baseATK/baseDEF 표시)
+- [x] 아이템 49종 (무기 10종, 갑옷 5종, 투구 4종, 하의 3종, 신발 4종, 장갑 3종, 허리띠 3종, 방패 3종, 장신구 14종)
 - [x] 경험치/레벨업 시스템
-- [x] 미니맵 (플레이어/몬스터/NPC/포탈 표시)
-- [x] **세이브/로드 시스템** (localStorage + 파일 내보내기/가져오기)
+- [x] 미니맵
+- [x] **세이브/로드 시스템** (F5/F9 핫키, 60초 자동저장, 파일 내보내기/가져오기)
 - [x] **3개 맵** (녹림 평원, 무림촌, 흑림) + 포탈 전환
-- [x] **NPC 시스템** (대화, 퀘스트 제공, 상점 연결)
+- [x] **NPC 5명** + 대화/퀘스트/상점 시스템
 - [x] **상점 시스템** (무기상점, 잡화상점 - 구매/판매)
-- [x] **퀘스트 시스템** (수락/진행/완료, 4종 퀘스트)
-- [x] **대화 시스템** (순차 대화, 선택지)
+- [x] **퀘스트 4종** (처치/수집/대화)
 - [x] 관리자 패널 (11개 에디터)
+- [x] **스프라이트 에디터** (구현 중 - 픽셀아트 직접 편집, PNG 업로드, 커스텀 스프라이트 저장)
 
 ### TODO (Future)
-- [ ] 실제 픽셀아트 스프라이트시트 교체
-- [ ] 캐릭터 걷기/공격 애니메이션 프레임
 - [ ] 인벤토리 드래그&드롭
 - [ ] 탈것/환수 인게임 구현
 - [ ] 사운드/BGM
@@ -376,5 +377,8 @@ MurimAdventure/
 - System classes are plain JS classes receiving `scene` in constructor (MapTransitionSystem은 static methods)
 - Korean display names in `nameKo`, English keys in `name`/`id`
 - Data constants use UPPER_SNAKE_CASE
-- All textures generated in BootScene (no external image files)
+- Real sprite assets in public/assets/ (loaded in BootScene.preload())
+- Programmatic textures in BootScene.create() as fallback
+- Custom sprites stored in localStorage, loaded via CustomSpriteLoader
 - Save data versioned (version: 1) for future migration
+- Weapon items have baseATK, baseATK_SPEED, baseRange; armor has baseDEF
