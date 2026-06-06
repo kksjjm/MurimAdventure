@@ -155,8 +155,9 @@ MurimAdventure/
 - `AI_BEHAVIOR`: PASSIVE, AGGRESSIVE, TERRITORIAL, PATROL, BOSS
 
 ### defaultData.js - Sample Game Content
-- 무기 10종 (철검, 언월도, 쌍단도, 천마검, 청룡창, 허공선, 철봉, 독침, 구절편, 금강권갑) - 각 무기에 baseATK, baseATK_SPEED, baseRange 기본 스탯
-- 방어구: baseDEF 기본 방어력 + 추가 옵션
+- 무기 10종 (철검, 언월도, 쌍단도, 천마검, 청룡창, 허공선, 철봉, 독침, 구절편, 금강권갑) - baseATK, baseATK_SPEED, baseRange
+- 갑옷 5종, 투구 4종, 하의 3종, 신발 4종, 장갑 3종, 허리띠 3종, 방패 3종 - baseDEF + 추가 옵션
+- 반지 4종, 목걸이 3종, 부적 3종, 옥패 4종 - 다양한 추가 옵션
 - 방어구 4종 + 장신구 4종
 - 스킬 14종 (심법 3 [태극심법, 철체공, **운기조식**], 내가무공 3, 외가무공 3, 경공 2, 주술 3)
 - 몬스터 6종 (야생 멧돼지 Lv.1 ~ 혈마왕 Lv.50)

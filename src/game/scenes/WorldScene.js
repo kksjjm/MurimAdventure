@@ -196,6 +196,22 @@ export default class WorldScene extends Phaser.Scene {
       map[y][26] = 1;
     }
 
+    // Clear portal areas so they're accessible
+    const mapMeta = getMapData('field_01');
+    if (mapMeta && mapMeta.portals) {
+      for (const portal of mapMeta.portals) {
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            const py = portal.y + dy;
+            const px = portal.x + dx;
+            if (py >= 0 && py < MAP_H && px >= 0 && px < MAP_W) {
+              map[py][px] = (dy === 0 && dx === 0) ? 1 : 0;
+            }
+          }
+        }
+      }
+    }
+
     return map;
   }
 

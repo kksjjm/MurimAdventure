@@ -208,7 +208,153 @@ export const DEFAULT_ARMOR = Object.freeze([
     levelReq: 40,
     baseDEF: 45,
     stats: { HP: 200, EVASION: 8, SPIRIT: 12 },
-    proficiencyBonus: { category: SKILL_CATEGORIES.SIMBEOP.key, amount: 5 },
+  },
+  // --- 갑옷 추가 ---
+  {
+    id: 'arm_iron_chainmail', nameKo: '철쇄갑', name: 'Iron Chainmail',
+    description: '철 고리를 엮어 만든 갑옷. 무겁지만 튼튼하다.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.ARMOR.key,
+    rarity: ITEM_RARITY.GRADE_11.key, levelReq: 5,
+    baseDEF: 10, stats: { HP: 40, MOVE_SPEED: -5 },
+  },
+  {
+    id: 'arm_dark_robe', nameKo: '암영포', name: 'Shadow Robe',
+    description: '어둠 속에서 자취를 감추는 무복. 회피에 특화.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.ARMOR.key,
+    rarity: ITEM_RARITY.GRADE_8.key, levelReq: 20,
+    baseDEF: 15, stats: { AGI: 12, EVASION: 10, MOVE_SPEED: 8 },
+  },
+  // --- 투구 추가 ---
+  {
+    id: 'arm_cloth_headband', nameKo: '무명 두건', name: 'Cloth Headband',
+    description: '수련생이 쓰는 기본 두건.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.HELMET.key,
+    rarity: ITEM_RARITY.GRADE_13.key, levelReq: 1,
+    baseDEF: 2, stats: { HP: 10 },
+  },
+  {
+    id: 'arm_wolf_helmet', nameKo: '낭아투구', name: 'Wolf Fang Helm',
+    description: '늑대 가죽으로 만든 투구. 야성의 기운이 서린다.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.HELMET.key,
+    rarity: ITEM_RARITY.GRADE_9.key, levelReq: 15,
+    baseDEF: 12, stats: { STR: 5, CRIT_RATE: 3, HP: 40 },
+  },
+  {
+    id: 'arm_dragon_crown', nameKo: '용린관', name: 'Dragon Scale Crown',
+    description: '용의 비늘로 장식된 관. 착용자의 위엄이 치솟는다.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.HELMET.key,
+    rarity: ITEM_RARITY.GRADE_5.key, levelReq: 40,
+    baseDEF: 28, stats: { INT: 15, SPIRIT: 12, MP: 100, HP: 80 },
+  },
+  // --- 하의 ---
+  {
+    id: 'arm_cloth_pants', nameKo: '무명 바지', name: 'Cloth Pants',
+    description: '기본적인 수련복 하의.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.PANTS.key,
+    rarity: ITEM_RARITY.GRADE_13.key, levelReq: 1,
+    baseDEF: 2, stats: { HP: 10 },
+  },
+  {
+    id: 'arm_leather_pants', nameKo: '가죽 경갑', name: 'Leather Leg Guards',
+    description: '가죽으로 만든 다리 보호대. 움직이기 편하다.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.PANTS.key,
+    rarity: ITEM_RARITY.GRADE_11.key, levelReq: 8,
+    baseDEF: 6, stats: { AGI: 3, HP: 20 },
+  },
+  {
+    id: 'arm_iron_greaves', nameKo: '철제 경갑', name: 'Iron Greaves',
+    description: '단단한 철로 만든 다리 갑옷.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.PANTS.key,
+    rarity: ITEM_RARITY.GRADE_9.key, levelReq: 18,
+    baseDEF: 14, stats: { HP: 50, DEF: 5 },
+  },
+  // --- 신발 추가 ---
+  {
+    id: 'arm_straw_sandals', nameKo: '짚신', name: 'Straw Sandals',
+    description: '가벼운 짚으로 엮은 기본 신발.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.SHOES.key,
+    rarity: ITEM_RARITY.GRADE_13.key, levelReq: 1,
+    baseDEF: 1, stats: { MOVE_SPEED: 5 },
+  },
+  {
+    id: 'arm_leather_boots', nameKo: '가죽 장화', name: 'Leather Boots',
+    description: '튼튼한 가죽 장화. 험한 길에서도 발을 보호한다.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.SHOES.key,
+    rarity: ITEM_RARITY.GRADE_11.key, levelReq: 6,
+    baseDEF: 3, stats: { MOVE_SPEED: 8, HP: 15 },
+  },
+  {
+    id: 'arm_shadow_shoes', nameKo: '잠영화', name: 'Shadow Step Shoes',
+    description: '소리 없이 움직일 수 있는 신발. 암살자들이 즐겨 신는다.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.SHOES.key,
+    rarity: ITEM_RARITY.GRADE_7.key, levelReq: 30,
+    baseDEF: 8, stats: { AGI: 12, MOVE_SPEED: 20, EVASION: 8, CRIT_RATE: 3 },
+  },
+  // --- 장갑 ---
+  {
+    id: 'arm_cloth_gloves', nameKo: '무명 장갑', name: 'Cloth Gloves',
+    description: '기본 천으로 만든 장갑.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.GLOVES.key,
+    rarity: ITEM_RARITY.GRADE_13.key, levelReq: 1,
+    baseDEF: 1, stats: { ATK: 1 },
+  },
+  {
+    id: 'arm_leather_gloves', nameKo: '가죽 장갑', name: 'Leather Gloves',
+    description: '무기를 잡기 편한 가죽 장갑.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.GLOVES.key,
+    rarity: ITEM_RARITY.GRADE_11.key, levelReq: 5,
+    baseDEF: 3, stats: { ATK: 3, ACCURACY: 3 },
+  },
+  {
+    id: 'arm_flame_gauntlets', nameKo: '화염 건곤수', name: 'Flame Gauntlets',
+    description: '불꽃의 기운이 깃든 건곤수. 공격에 화기를 더한다.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.GLOVES.key,
+    rarity: ITEM_RARITY.GRADE_7.key, levelReq: 28,
+    baseDEF: 8, stats: { ATK: 12, CRIT_DMG: 15, DMG_BONUS: 5 },
+  },
+  // --- 허리띠 ---
+  {
+    id: 'arm_cloth_belt', nameKo: '무명 요대', name: 'Cloth Sash',
+    description: '기본적인 천 허리띠.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.BELT.key,
+    rarity: ITEM_RARITY.GRADE_13.key, levelReq: 1,
+    baseDEF: 1, stats: { HP: 10 },
+  },
+  {
+    id: 'arm_warrior_belt', nameKo: '무사 혁대', name: 'Warrior Belt',
+    description: '단단한 가죽으로 만든 무사의 혁대.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.BELT.key,
+    rarity: ITEM_RARITY.GRADE_10.key, levelReq: 10,
+    baseDEF: 4, stats: { STR: 4, HP: 30, DEF: 2 },
+  },
+  {
+    id: 'arm_dragon_belt', nameKo: '용린 혁대', name: 'Dragon Scale Belt',
+    description: '용의 비늘을 이어 만든 혁대. 강대한 기운이 느껴진다.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.BELT.key,
+    rarity: ITEM_RARITY.GRADE_6.key, levelReq: 35,
+    baseDEF: 12, stats: { STR: 10, HP: 100, DEF: 8, HP_REGEN: 3 },
+  },
+  // --- 방패 ---
+  {
+    id: 'arm_wooden_shield', nameKo: '목재 방패', name: 'Wooden Shield',
+    description: '나무로 만든 기본 방패.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.SHIELD.key,
+    rarity: ITEM_RARITY.GRADE_13.key, levelReq: 1,
+    baseDEF: 5, stats: { DMG_TAKEN: -3 },
+  },
+  {
+    id: 'arm_iron_shield', nameKo: '철제 방패', name: 'Iron Shield',
+    description: '단단한 철로 만든 방패. 강한 타격도 막아낸다.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.SHIELD.key,
+    rarity: ITEM_RARITY.GRADE_10.key, levelReq: 12,
+    baseDEF: 15, stats: { DMG_TAKEN: -8, HP: 40 },
+  },
+  {
+    id: 'arm_heavenly_shield', nameKo: '천강반', name: 'Heavenly Steel Buckler',
+    description: '하늘의 강철로 단조한 방패. 모든 무공을 튕겨낸다.',
+    type: ITEM_TYPES.ARMOR.key, slot: EQUIPMENT_SLOTS.SHIELD.key,
+    rarity: ITEM_RARITY.GRADE_6.key, levelReq: 35,
+    baseDEF: 32, stats: { DMG_TAKEN: -15, HP: 100, DEF: 10, SPIRIT: 8 },
   },
 ]);
 
@@ -275,13 +421,81 @@ export const DEFAULT_ACCESSORIES = Object.freeze([
     slot: EQUIPMENT_SLOTS.JADE_TOKEN.key,
     rarity: ITEM_RARITY.GRADE_7.key,
     levelReq: 25,
-    stats: {
-      MP: 150,
-      INT: 10,
-      SPIRIT: 15,
-      HP: 50,
-    },
-    proficiencyBonus: { category: SKILL_CATEGORIES.SIMBEOP.key, amount: 4 },
+    stats: { MP: 150, INT: 10, SPIRIT: 15, HP: 50 },
+  },
+  // --- 반지 추가 ---
+  {
+    id: 'acc_iron_ring', nameKo: '철제 반지', name: 'Iron Ring',
+    description: '투박한 철 반지. 약간의 힘을 더해준다.',
+    type: ITEM_TYPES.ACCESSORY.key, slot: EQUIPMENT_SLOTS.RING_LEFT.key,
+    rarity: ITEM_RARITY.GRADE_13.key, levelReq: 1,
+    stats: { STR: 2, ATK: 1 },
+  },
+  {
+    id: 'acc_blood_ring', nameKo: '혈옥 반지', name: 'Blood Jade Ring',
+    description: '핏빛 옥으로 만든 반지. 생명력을 흡수하는 힘이 있다.',
+    type: ITEM_TYPES.ACCESSORY.key, slot: EQUIPMENT_SLOTS.RING_RIGHT.key,
+    rarity: ITEM_RARITY.GRADE_8.key, levelReq: 20,
+    stats: { HP: 80, HP_REGEN: 3, CRIT_RATE: 4, DMG_BONUS: 3 },
+  },
+  {
+    id: 'acc_moonlight_ring', nameKo: '월광 반지', name: 'Moonlight Ring',
+    description: '달빛을 머금은 신비한 반지. 내공을 크게 증폭시킨다.',
+    type: ITEM_TYPES.ACCESSORY.key, slot: EQUIPMENT_SLOTS.RING_LEFT.key,
+    rarity: ITEM_RARITY.GRADE_6.key, levelReq: 32,
+    stats: { MP: 120, INT: 12, MP_REGEN: 4, SPIRIT: 8 },
+  },
+  // --- 목걸이 추가 ---
+  {
+    id: 'acc_bone_necklace', nameKo: '수골 목걸이', name: 'Beast Bone Necklace',
+    description: '맹수의 뼈를 꿴 목걸이. 야성적인 힘이 깃든다.',
+    type: ITEM_TYPES.ACCESSORY.key, slot: EQUIPMENT_SLOTS.NECKLACE.key,
+    rarity: ITEM_RARITY.GRADE_12.key, levelReq: 3,
+    stats: { STR: 3, ATK: 2 },
+  },
+  {
+    id: 'acc_phoenix_pendant', nameKo: '봉황 패', name: 'Phoenix Pendant',
+    description: '봉황의 깃털을 담은 패. 불사의 기운이 깃든다.',
+    type: ITEM_TYPES.ACCESSORY.key, slot: EQUIPMENT_SLOTS.NECKLACE.key,
+    rarity: ITEM_RARITY.GRADE_5.key, levelReq: 40,
+    stats: { HP: 150, HP_REGEN: 5, MP_REGEN: 3, DMG_TAKEN: -10, SPIRIT: 10 },
+  },
+  // --- 부적 추가 ---
+  {
+    id: 'acc_ward_talisman', nameKo: '벽사 부적', name: 'Ward Talisman',
+    description: '악귀를 물리치는 부적. 정신력을 높여준다.',
+    type: ITEM_TYPES.ACCESSORY.key, slot: EQUIPMENT_SLOTS.TALISMAN.key,
+    rarity: ITEM_RARITY.GRADE_12.key, levelReq: 3,
+    stats: { SPIRIT: 5, DEF: 2 },
+  },
+  {
+    id: 'acc_thunder_talisman', nameKo: '뇌신 부적', name: 'Thunder God Talisman',
+    description: '번개의 기운을 담은 부적. 공격에 천둥의 힘을 더한다.',
+    type: ITEM_TYPES.ACCESSORY.key, slot: EQUIPMENT_SLOTS.TALISMAN.key,
+    rarity: ITEM_RARITY.GRADE_7.key, levelReq: 25,
+    stats: { ATK: 10, CRIT_RATE: 5, CRIT_DMG: 18, DMG_BONUS: 8 },
+  },
+  // --- 옥패 추가 ---
+  {
+    id: 'acc_novice_jade', nameKo: '수련생 옥패', name: 'Novice Jade Token',
+    description: '무림에 입문한 수련생의 옥패.',
+    type: ITEM_TYPES.ACCESSORY.key, slot: EQUIPMENT_SLOTS.JADE_TOKEN.key,
+    rarity: ITEM_RARITY.GRADE_12.key, levelReq: 1,
+    stats: { HP: 20, MP: 20 },
+  },
+  {
+    id: 'acc_shaolin_jade', nameKo: '소림 옥패', name: 'Shaolin Jade Token',
+    description: '소림사의 옥패. 육체 수련에 큰 도움을 준다.',
+    type: ITEM_TYPES.ACCESSORY.key, slot: EQUIPMENT_SLOTS.JADE_TOKEN.key,
+    rarity: ITEM_RARITY.GRADE_8.key, levelReq: 20,
+    stats: { HP: 100, STR: 8, DEF: 5, HP_REGEN: 2 },
+  },
+  {
+    id: 'acc_heavenly_jade', nameKo: '천기 옥패', name: 'Heavenly Jade Token',
+    description: '천기를 읽는 자만이 지닐 수 있는 최상급 옥패.',
+    type: ITEM_TYPES.ACCESSORY.key, slot: EQUIPMENT_SLOTS.JADE_TOKEN.key,
+    rarity: ITEM_RARITY.GRADE_3.key, levelReq: 45,
+    stats: { HP: 200, MP: 200, STR: 12, INT: 12, AGI: 8, DMG_BONUS: 10, DMG_TAKEN: -8 },
   },
 ]);
 
