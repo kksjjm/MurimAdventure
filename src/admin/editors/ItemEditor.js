@@ -113,9 +113,10 @@ export class ItemEditor {
   openEditor(container, itemId) {
     const isNew = !itemId;
     const item = isNew ? {
-      id: '', name: '', description: '', type: 'WEAPON', weaponType: 'sword',
-      rarity: 'COMMON', levelReq: 1, stats: {}, slot: 'WEAPON',
-      proficiencyBonus: 0, specialEffects: [], icon: '', stackable: false, maxStack: 1
+      id: '', name: '', description: '', type: 'WEAPON', weaponType: '',
+      rarity: 'GRADE_13', levelReq: 1, stats: {}, slot: 'WEAPON',
+      proficiencyBonus: 0, specialEffects: [], icon: '', spriteKey: '',
+      stackable: false, maxStack: 1, baseATK: 0, baseATK_SPEED: 0, baseRange: 0, baseDEF: 0
     } : { ...this.dm.data.items[itemId] };
 
     // Ensure stats is an object

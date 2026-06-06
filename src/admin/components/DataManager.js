@@ -13,12 +13,20 @@ import {
 
 const STORAGE_KEY = 'murimAdventure_adminData';
 
+function arrayToDict(arr) {
+  const dict = {};
+  for (const item of arr) {
+    if (item && item.id) dict[item.id] = item;
+  }
+  return dict;
+}
+
 function getDefaultData() {
   return {
-    items: JSON.parse(JSON.stringify(ITEMS)),
-    skills: JSON.parse(JSON.stringify(SKILLS)),
+    items: arrayToDict(JSON.parse(JSON.stringify(ITEMS))),
+    skills: arrayToDict(JSON.parse(JSON.stringify(SKILLS))),
     skillCombinations: JSON.parse(JSON.stringify(SKILL_COMBINATIONS)),
-    monsters: JSON.parse(JSON.stringify(MONSTERS)),
+    monsters: arrayToDict(JSON.parse(JSON.stringify(MONSTERS))),
     maps: [
       {
         id: 'map_green_forest', name: '녹림', width: 20, height: 15, tileSize: 32,
@@ -103,6 +111,17 @@ export class DataManager {
     if (stored) {
       try {
         this.data = JSON.parse(stored);
+        // Migrate: if items/skills/monsters are arrays, convert to id-keyed objects
+        if (Array.isArray(this.data.items)) {
+          this.data.items = arrayToDict(this.data.items);
+        }
+        if (Array.isArray(this.data.skills)) {
+          this.data.skills = arrayToDict(this.data.skills);
+        }
+        if (Array.isArray(this.data.monsters)) {
+          this.data.monsters = arrayToDict(this.data.monsters);
+        }
+        this.save(); // persist migration
       } catch (e) {
         console.error('Failed to parse stored data, loading defaults', e);
         this.data = getDefaultData();

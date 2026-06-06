@@ -53,6 +53,12 @@ export class MapEditor {
   }
 
   render(container) {
+    // Auto-load game maps if maps list is empty or only has placeholder
+    if (!this.dm.data.maps || this.dm.data.maps.length === 0 ||
+        (this.dm.data.maps.length === 1 && (!this.dm.data.maps[0].layers || !this.dm.data.maps[0].layers.ground || this.dm.data.maps[0].layers.ground.length === 0))) {
+      this._autoLoadGameMaps();
+    }
+
     const maps = this.getMaps();
     const map = this.getCurrentMap();
 
@@ -351,6 +357,47 @@ export class MapEditor {
     ctx.strokeStyle = this.currentLayer === 'collision' ? 'rgba(255,0,0,0.5)' : 'rgba(212,168,67,0.3)';
     ctx.lineWidth = 2;
     ctx.strokeRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+
+  _autoLoadGameMaps() {
+    let gameMaps;
+    try { gameMaps = getAllMaps(); } catch { return; }
+
+    const mapsWithTiles = gameMaps.filter(m => m.tiles && Array.isArray(m.tiles));
+    if (mapsWithTiles.length === 0) return;
+
+    this.dm.data.maps = [];
+    const gameTileToEditor = { 0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6 };
+
+    for (const gameMap of mapsWithTiles) {
+      const w = gameMap.width;
+      const h = gameMap.height;
+      const ground = new Array(w * h).fill(0);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const gameTile = gameMap.tiles[y] ? gameMap.tiles[y][x] : 0;
+          ground[y * w + x] = gameTileToEditor[gameTile] !== undefined ? gameTileToEditor[gameTile] : gameTile;
+        }
+      }
+      const collision = new Array(w * h).fill(0);
+      for (let i = 0; i < ground.length; i++) {
+        if (ground[i] === 4 || ground[i] === 5 || ground[i] === 6) collision[i] = 1;
+      }
+
+      this.dm.data.maps.push({
+        id: gameMap.id,
+        name: gameMap.nameKo || gameMap.id,
+        width: w, height: h, tileSize: 32,
+        layers: { ground, objects: new Array(w * h).fill(0), collision },
+        spawnPoints: {
+          player: gameMap.spawns ? { x: gameMap.spawns.player.x, y: gameMap.spawns.player.y } : { x: 1, y: 1 },
+          monsters: [],
+          npcs: gameMap.npcs ? gameMap.npcs.map(n => ({ x: n.tileX, y: n.tileY, id: n.id })) : [],
+          items: gameMap.portals ? gameMap.portals.map(p => ({ x: p.x, y: p.y, label: p.label })) : [],
+        },
+      });
+    }
+    this.dm.save();
   }
 
   _importGameMap(container) {

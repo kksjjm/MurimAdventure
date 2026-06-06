@@ -101,8 +101,9 @@ export class MonsterEditor {
       ai: 'PASSIVE', chaseRange: 100, attackRange: 30, attackSpeed: 1000,
       exp: 20, gold: { min: 5, max: 15 },
       drops: [], sprite: '', tint: 0xffffff
-    } : JSON.parse(JSON.stringify(this.dm.data.monsters[monsterId]));
+    } : JSON.parse(JSON.stringify(this.dm.data.monsters[monsterId] || {}));
 
+    if (!mon.id && monsterId) { mon.id = monsterId; }
     if (!mon.stats) mon.stats = {};
     if (!mon.drops) mon.drops = [];
     if (typeof mon.gold !== 'object') mon.gold = { min: mon.gold || 0, max: mon.gold || 0 };
