@@ -7,6 +7,8 @@ import BootScene from './scenes/BootScene.js';
 import PreloadScene from './scenes/PreloadScene.js';
 import WorldScene from './scenes/WorldScene.js';
 import UIScene from './scenes/UIScene.js';
+import VillageScene from './scenes/VillageScene.js';
+import DarkForestScene from './scenes/DarkForestScene.js';
 
 // --- Game Configuration ---
 const config = {
@@ -24,7 +26,7 @@ const config = {
       debug: false,
     },
   },
-  scene: [BootScene, PreloadScene, WorldScene, UIScene],
+  scene: [BootScene, PreloadScene, WorldScene, UIScene, VillageScene, DarkForestScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

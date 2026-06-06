@@ -22,6 +22,10 @@ export const STATS = Object.freeze({
   ITEM_FIND:  { key: 'ITEM_FIND',  nameKo: '아이템발견', description: 'Item Find Rate' },
   MOVE_SPEED: { key: 'MOVE_SPEED', nameKo: '이동속도', description: 'Movement Speed' },
   ATK_SPEED:  { key: 'ATK_SPEED',  nameKo: '공격속도', description: 'Attack Speed' },
+  HP_REGEN:   { key: 'HP_REGEN',   nameKo: '체력회복', description: 'HP Regeneration per tick' },
+  MP_REGEN:   { key: 'MP_REGEN',   nameKo: '내력회복', description: 'MP Regeneration per tick' },
+  DMG_BONUS:  { key: 'DMG_BONUS',  nameKo: '피해증가', description: 'Damage dealt increase %' },
+  DMG_TAKEN:  { key: 'DMG_TAKEN',  nameKo: '받는피해증가', description: 'Damage taken increase % (negative = reduction)' },
 });
 
 /**
@@ -46,10 +50,27 @@ export const EQUIPMENT_SLOTS = Object.freeze({
 /**
  * Weapon type classifications
  */
+/**
+ * Weapon grip (how the weapon is held)
+ */
+export const WEAPON_GRIP = Object.freeze({
+  ONE_HANDED: { key: 'ONE_HANDED', nameKo: '한손', blocksShield: false },
+  TWO_HANDED: { key: 'TWO_HANDED', nameKo: '양손', blocksShield: true },
+  DUAL_WIELD: { key: 'DUAL_WIELD', nameKo: '쌍수', blocksShield: true },
+});
+
+/**
+ * Weapon type classifications (무기 분류) - determines proficiency category
+ */
 export const WEAPON_TYPES = Object.freeze({
-  TWO_HANDED: { key: 'TWO_HANDED', nameKo: '양손무기', blocksShield: true },
-  ONE_HANDED: { key: 'ONE_HANDED', nameKo: '한손무기', blocksShield: false },
-  DUAL_WIELD: { key: 'DUAL_WIELD', nameKo: '쌍수무기', blocksShield: true },
+  SWORD:    { key: 'SWORD',    nameKo: '검 (劍)',     description: '곧은 칼날의 양날검' },
+  BLADE:    { key: 'BLADE',    nameKo: '도 (刀)',     description: '한쪽 날의 외날도' },
+  SPEAR:    { key: 'SPEAR',    nameKo: '창 (槍)',     description: '긴 자루에 날이 달린 장병기' },
+  STAFF:    { key: 'STAFF',    nameKo: '봉 (棒)',     description: '나무나 금속으로 만든 긴 봉' },
+  HIDDEN:   { key: 'HIDDEN',   nameKo: '암기 (暗器)', description: '표창, 비수 등 투척/은닉 무기' },
+  WHIP:     { key: 'WHIP',     nameKo: '편 (鞭)',     description: '채찍, 연환 등 유연한 무기' },
+  FIST:     { key: 'FIST',     nameKo: '권 (拳)',     description: '맨손 또는 권갑류' },
+  EXOTIC:   { key: 'EXOTIC',   nameKo: '기문병기 (奇門)', description: '부채, 피리, 바늘 등 특수 무기' },
 });
 
 /**
@@ -82,14 +103,33 @@ export const JUSUL_TYPES = Object.freeze({
 /**
  * Item rarity tiers
  */
+/**
+ * Item grade system (0등급 = 최고, 13등급 = 최하)
+ * grade 숫자가 낮을수록 강력한 아이템
+ */
 export const ITEM_RARITY = Object.freeze({
-  COMMON:    { key: 'COMMON',    nameKo: '범용',   tier: 0, color: '#9d9d9d', dropWeight: 1000 },
-  UNCOMMON:  { key: 'UNCOMMON',  nameKo: '고급',   tier: 1, color: '#1eff00', dropWeight: 500 },
-  RARE:      { key: 'RARE',      nameKo: '희귀',   tier: 2, color: '#0070dd', dropWeight: 200 },
-  EPIC:      { key: 'EPIC',      nameKo: '영웅',   tier: 3, color: '#a335ee', dropWeight: 50 },
-  LEGENDARY: { key: 'LEGENDARY', nameKo: '전설',   tier: 4, color: '#ff8000', dropWeight: 10 },
-  MYTHIC:    { key: 'MYTHIC',    nameKo: '신화',   tier: 5, color: '#e6cc80', dropWeight: 1 },
+  GRADE_0:  { key: 'GRADE_0',  grade: 0,  nameKo: '창세 (創世)',   color: '#ff0000', dropWeight: 0,    glowColor: 0xff0000 },
+  GRADE_1:  { key: 'GRADE_1',  grade: 1,  nameKo: '무극 (無極)',   color: '#ff4400', dropWeight: 1,    glowColor: 0xff4400 },
+  GRADE_2:  { key: 'GRADE_2',  grade: 2,  nameKo: '천기 (天機)',   color: '#ff8800', dropWeight: 2,    glowColor: 0xff8800 },
+  GRADE_3:  { key: 'GRADE_3',  grade: 3,  nameKo: '태초 (太初)',   color: '#ffcc00', dropWeight: 5,    glowColor: 0xffcc00 },
+  GRADE_4:  { key: 'GRADE_4',  grade: 4,  nameKo: '탈해 (脫解)',   color: '#ccff00', dropWeight: 8,    glowColor: 0xccff00 },
+  GRADE_5:  { key: 'GRADE_5',  grade: 5,  nameKo: '신화 (神話)',   color: '#e6cc80', dropWeight: 12,   glowColor: 0xe6cc80 },
+  GRADE_6:  { key: 'GRADE_6',  grade: 6,  nameKo: '현경 (玄境)',   color: '#a335ee', dropWeight: 25,   glowColor: 0xa335ee },
+  GRADE_7:  { key: 'GRADE_7',  grade: 7,  nameKo: '보병 (寶兵)',   color: '#ff8000', dropWeight: 50,   glowColor: 0xff8000 },
+  GRADE_8:  { key: 'GRADE_8',  grade: 8,  nameKo: '극품 (極品)',   color: '#0070dd', dropWeight: 100,  glowColor: 0x0070dd },
+  GRADE_9:  { key: 'GRADE_9',  grade: 9,  nameKo: '명기 (名器)',   color: '#1eff00', dropWeight: 200,  glowColor: 0x1eff00 },
+  GRADE_10: { key: 'GRADE_10', grade: 10, nameKo: '상품 (上品)',   color: '#00ccff', dropWeight: 400,  glowColor: 0x00ccff },
+  GRADE_11: { key: 'GRADE_11', grade: 11, nameKo: '중품 (中品)',   color: '#cccccc', dropWeight: 600,  glowColor: 0xcccccc },
+  GRADE_12: { key: 'GRADE_12', grade: 12, nameKo: '범품 (凡品)',   color: '#9d9d9d', dropWeight: 800,  glowColor: 0x9d9d9d },
+  GRADE_13: { key: 'GRADE_13', grade: 13, nameKo: '하품 (下品)',   color: '#666666', dropWeight: 1000, glowColor: 0x666666 },
 });
+
+/** Helper: get rarity display name with grade number */
+export function getRarityDisplay(rarityKey) {
+  const r = ITEM_RARITY[rarityKey];
+  if (!r) return rarityKey;
+  return `${r.grade}등급 ${r.nameKo}`;
+}
 
 /**
  * Elemental affinities for skills
@@ -110,13 +150,13 @@ export const ELEMENT_TYPES = Object.freeze({
  * Proficiency (숙련도) progression levels with thresholds
  */
 export const PROFICIENCY_LEVELS = Object.freeze({
-  BEGINNER:     { key: 'BEGINNER',     nameKo: '초식',   threshold: 0,     statMultiplier: 1.0 },
-  INTERMEDIATE: { key: 'INTERMEDIATE', nameKo: '중급',   threshold: 100,   statMultiplier: 1.15 },
-  ADVANCED:     { key: 'ADVANCED',     nameKo: '상급',   threshold: 500,   statMultiplier: 1.35 },
-  EXPERT:       { key: 'EXPERT',       nameKo: '절정',   threshold: 1500,  statMultiplier: 1.6 },
-  MASTER:       { key: 'MASTER',       nameKo: '화경',   threshold: 4000,  statMultiplier: 2.0 },
-  GRANDMASTER:  { key: 'GRANDMASTER',  nameKo: '현경',   threshold: 10000, statMultiplier: 2.5 },
-  TRANSCENDENT: { key: 'TRANSCENDENT', nameKo: '탈태환골', threshold: 25000, statMultiplier: 3.5 },
+  BEGINNER:     { key: 'BEGINNER',     nameKo: '초식',     threshold: 0,     statMultiplier: 1.0,  dmgBonus: 0,   atkSpdBonus: 0,  critRateBonus: 0,  critDmgBonus: 0 },
+  INTERMEDIATE: { key: 'INTERMEDIATE', nameKo: '중급',     threshold: 100,   statMultiplier: 1.15, dmgBonus: 5,   atkSpdBonus: 3,  critRateBonus: 1,  critDmgBonus: 5 },
+  ADVANCED:     { key: 'ADVANCED',     nameKo: '상급',     threshold: 500,   statMultiplier: 1.35, dmgBonus: 12,  atkSpdBonus: 6,  critRateBonus: 3,  critDmgBonus: 12 },
+  EXPERT:       { key: 'EXPERT',       nameKo: '절정',     threshold: 1500,  statMultiplier: 1.6,  dmgBonus: 22,  atkSpdBonus: 10, critRateBonus: 5,  critDmgBonus: 20 },
+  MASTER:       { key: 'MASTER',       nameKo: '화경',     threshold: 4000,  statMultiplier: 2.0,  dmgBonus: 35,  atkSpdBonus: 15, critRateBonus: 8,  critDmgBonus: 30 },
+  GRANDMASTER:  { key: 'GRANDMASTER',  nameKo: '현경',     threshold: 10000, statMultiplier: 2.5,  dmgBonus: 50,  atkSpdBonus: 20, critRateBonus: 12, critDmgBonus: 45 },
+  TRANSCENDENT: { key: 'TRANSCENDENT', nameKo: '탈태환골', threshold: 25000, statMultiplier: 3.5,  dmgBonus: 75,  atkSpdBonus: 30, critRateBonus: 18, critDmgBonus: 65 },
 });
 
 /**

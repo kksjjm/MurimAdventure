@@ -4,7 +4,8 @@
 
 import Phaser from 'phaser';
 import { ITEMS_BY_ID, SKILLS_BY_ID, getExpForLevel } from '../../data/defaultData.js';
-import { EQUIPMENT_SLOTS, getProficiencyLevel } from '../../data/constants.js';
+import { EQUIPMENT_SLOTS, ITEM_RARITY, getProficiencyLevel, getRarityDisplay } from '../../data/constants.js';
+import SaveSystem from '../systems/SaveSystem.js';
 
 export default class UIScene extends Phaser.Scene {
   constructor() {
@@ -83,6 +84,27 @@ export default class UIScene extends Phaser.Scene {
     // M for minimap toggle
     this.input.keyboard.on('keydown-M', () => {
       if (this.worldScene) this.worldScene.toggleMinimap();
+    });
+
+    // --- Save System ---
+    this.saveSystem = new SaveSystem();
+
+    // F5 to quick save
+    this.input.keyboard.on('keydown-F5', (e) => {
+      e.preventDefault();
+      this._doSave();
+    });
+    // F9 to quick load
+    this.input.keyboard.on('keydown-F9', (e) => {
+      e.preventDefault();
+      this._doLoadLast();
+    });
+
+    // Auto-save every 60 seconds
+    this.time.addEvent({
+      delay: 60000,
+      callback: () => this._doAutoSave(),
+      loop: true,
     });
 
     // Initial HUD update
@@ -195,14 +217,29 @@ export default class UIScene extends Phaser.Scene {
         const skill = SKILLS_BY_ID[skillId];
         text.setText(skill.nameKo || skill.name);
 
-        // Cooldown overlay
+        // Cooldown / Duration overlay
         gfx.cdOverlay.clear();
+        const now = Date.now();
+
+        // Check if skill is actively channeling/buffing (green overlay)
+        const activeEffect = player.activeSkillEffects[skillId] || player.channelEffects[skillId];
+        if (activeEffect) {
+          const elapsed = now - activeEffect.startTime;
+          const dur = activeEffect.duration;
+          const remaining = Math.max(0, dur - elapsed);
+          if (remaining > 0) {
+            const pct = remaining / dur;
+            gfx.cdOverlay.fillStyle(0x00aa44, 0.4);
+            gfx.cdOverlay.fillRect(gfx.sx, gfx.sy + gfx.size * (1 - pct), gfx.size, gfx.size * pct);
+          }
+        }
+
+        // Cooldown overlay (dark, on top)
         const lastUsed = player.skillCooldowns[skillId] || 0;
         const cd = skill.cooldown || 0;
-        const now = Date.now();
-        const remaining = Math.max(0, cd - (now - lastUsed));
-        if (remaining > 0 && cd > 0) {
-          const pct = remaining / cd;
+        const cdRemaining = Math.max(0, cd - (now - lastUsed));
+        if (cdRemaining > 0 && cd > 0) {
+          const pct = cdRemaining / cd;
           gfx.cdOverlay.fillStyle(0x000000, 0.6);
           gfx.cdOverlay.fillRect(gfx.sx, gfx.sy, gfx.size, gfx.size * pct);
         }
@@ -223,6 +260,8 @@ export default class UIScene extends Phaser.Scene {
       { label: '장비 (E)', key: 'equipment', hotkey: 'E' },
       { label: '무공 (K)', key: 'skills', hotkey: 'K' },
       { label: '정보 (C)', key: 'character', hotkey: 'C' },
+      { label: '저장 (F5)', key: 'save', hotkey: null },
+      { label: '불러오기', key: 'load', hotkey: null },
     ];
 
     const btnW = 80;
@@ -282,6 +321,16 @@ export default class UIScene extends Phaser.Scene {
   // ==========================================================================
 
   _togglePanel(panelKey) {
+    // Save/Load are actions, not panels
+    if (panelKey === 'save') {
+      this._doSave();
+      return;
+    }
+    if (panelKey === 'load') {
+      this._showPanel('load');
+      return;
+    }
+
     if (this.activePanel === panelKey) {
       this._closePanel();
     } else {
@@ -290,6 +339,7 @@ export default class UIScene extends Phaser.Scene {
   }
 
   _closePanel() {
+    this._hideTooltip();
     this.panelContainer.removeAll(true);
     this.panelContainer.setVisible(false);
     this.activePanel = null;
@@ -312,6 +362,9 @@ export default class UIScene extends Phaser.Scene {
         break;
       case 'character':
         this._drawCharacterPanel();
+        break;
+      case 'load':
+        this._drawLoadPanel();
         break;
     }
   }
@@ -641,6 +694,14 @@ export default class UIScene extends Phaser.Scene {
       `CRIT Rate: ${computed.CRIT_RATE}%`,
       `CRIT DMG:  ${computed.CRIT_DMG}%`,
       '',
+      `--- 피해 증감 ---`,
+      `피해 증가: ${computed.DMG_BONUS || 0}%`,
+      `받는 피해: ${computed.DMG_TAKEN || 0}%`,
+      '',
+      `--- 회복 ---`,
+      `HP 회복: ${computed.HP_REGEN || 0}/2초`,
+      `MP 회복: ${computed.MP_REGEN || 0}/2초`,
+      '',
       `--- 이동 ---`,
       `MOVE_SPEED: ${computed.MOVE_SPEED}`,
     ];
@@ -663,22 +724,35 @@ export default class UIScene extends Phaser.Scene {
   _showTooltip(x, y, itemData) {
     this._hideTooltip();
 
+    const { width, height } = this.cameras.main;
     const tipW = 180;
     const lines = [
       itemData.nameKo || itemData.name,
       itemData.name || '',
-      `등급: ${itemData.rarity || 'COMMON'}`,
+      `등급: ${getRarityDisplay(itemData.rarity)}`,
       itemData.description || '',
     ];
 
-    if (itemData.stats) {
-      lines.push('');
+    // Show weapon base stats
+    if (itemData.baseATK) lines.push(`  공격력: ${itemData.baseATK}`);
+    if (itemData.baseATK_SPEED) lines.push(`  공격속도: ${itemData.baseATK_SPEED}`);
+    if (itemData.baseRange) lines.push(`  사정거리: ${itemData.baseRange}`);
+    // Show armor base DEF
+    if (itemData.baseDEF) lines.push(`  방어력: ${itemData.baseDEF}`);
+
+    if (itemData.stats && Object.keys(itemData.stats).length > 0) {
+      lines.push('  --- 추가 옵션 ---');
       for (const [stat, val] of Object.entries(itemData.stats)) {
-        lines.push(`  ${stat}: +${val}`);
+        const sign = val >= 0 ? '+' : '';
+        lines.push(`  ${stat}: ${sign}${val}`);
       }
     }
 
     const tipH = lines.length * 14 + 12;
+
+    // Clamp tooltip within screen bounds
+    if (x + tipW > width) x = x - tipW - 50;
+    if (y + tipH > height) y = height - tipH - 10;
 
     this.tooltipContainer = this.add.container(0, 0).setDepth(3000);
 
@@ -745,8 +819,12 @@ export default class UIScene extends Phaser.Scene {
     // Proficiency
     const weapon = player.equipment.WEAPON;
     if (weapon && weapon.weaponType && this.worldScene.proficiencySystem) {
-      const profLevel = this.worldScene.proficiencySystem.getProficiencyLevel('weapon', weapon.weaponType);
-      this.profText.setText(`${weapon.nameKo || weapon.name} 숙련: ${profLevel.nameKo}`);
+      const profSys = this.worldScene.proficiencySystem;
+      const profLevel = profSys.getProficiencyLevel('weapon', weapon.weaponType);
+      const bonuses = profSys.getWeaponProfBonuses(weapon.weaponType);
+      const weaponTypeNames = { SWORD:'검', BLADE:'도', SPEAR:'창', STAFF:'봉', HIDDEN:'암기', WHIP:'편', FIST:'권', EXOTIC:'기문' };
+      const typeName = weaponTypeNames[weapon.weaponType] || weapon.weaponType;
+      this.profText.setText(`${typeName} 숙련: ${profLevel.nameKo} (피해+${bonuses.dmgBonus}% 크리+${bonuses.critRateBonus}%)`);
     } else {
       this.profText.setText('');
     }
@@ -803,6 +881,186 @@ export default class UIScene extends Phaser.Scene {
       y: height / 2 - 100,
       alpha: 0,
       duration: 2000,
+      onComplete: () => text.destroy(),
+    });
+  }
+
+  // ==========================================================================
+  // Save / Load
+  // ==========================================================================
+
+  _doSave() {
+    const ws = this.worldScene;
+    if (!ws || !ws.player) return;
+    const mapId = ws.mapId || 'field_01';
+    const ok = this.saveSystem.save(ws.player, mapId, ws.proficiencySystem);
+    this._showSaveNotification(ok ? '저장 완료!' : '저장 실패!', ok);
+  }
+
+  _doAutoSave() {
+    const ws = this.worldScene;
+    if (!ws || !ws.player) return;
+    const mapId = ws.mapId || 'field_01';
+    this.saveSystem.autoSave(ws.player, mapId, ws.proficiencySystem);
+  }
+
+  _doLoadLast() {
+    const data = this.saveSystem.load();
+    if (!data) {
+      this._showSaveNotification('저장 데이터가 없습니다!', false);
+      return;
+    }
+    this._applyLoadData(data);
+  }
+
+  _applyLoadData(data) {
+    const ws = this.worldScene;
+    if (!ws || !ws.player) return;
+
+    // Apply player data
+    Object.assign(ws.player.stats, data.player.stats);
+    ws.player.equipment = { ...ws.player.equipment, ...data.player.equipment };
+    ws.player.inventory = data.player.inventory.map(e => ({ ...e }));
+    ws.player.skills = [...data.player.skills];
+    ws.player.skillSlots = [...data.player.skillSlots];
+    ws.player.skillCooldowns = {};
+    ws.player.buffs = [];
+    ws.player.channelEffects = {};
+    ws.player.activeSkillEffects = {};
+
+    // Apply proficiency
+    if (ws.proficiencySystem && data.proficiency) {
+      ws.proficiencySystem.fromJSON(data.proficiency);
+    }
+
+    // Reposition player
+    if (data.map) {
+      ws.player.setPosition(data.map.x, data.map.y);
+    }
+
+    // Refresh equipment visuals
+    ws.player._updateEquipmentVisuals();
+
+    ws.events.emit('player-stats-changed');
+    this._showSaveNotification('불러오기 완료!', true);
+
+    // If different map, transition
+    if (data.map && data.map.id && data.map.id !== (ws.mapId || 'field_01')) {
+      // For simplicity, reload current scene with player data
+      // Full map transition would require MapTransitionSystem
+    }
+  }
+
+  _drawLoadPanel() {
+    const { width, height } = this.cameras.main;
+    const pw = 300;
+    const ph = 280;
+    const px = (width - pw) / 2;
+    const py = (height - ph) / 2;
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x1a1a2e, 0.95);
+    bg.fillRect(px, py, pw, ph);
+    bg.fillStyle(0x2a2a4e, 1.0);
+    bg.fillRect(px, py, pw, 28);
+    bg.lineStyle(2, 0x4a4a6e);
+    bg.strokeRect(px, py, pw, ph);
+    this.panelContainer.add(bg);
+
+    const title = this.add.text(px + pw / 2, py + 14, '저장 / 불러오기', {
+      fontSize: '13px', fontFamily: 'monospace', color: '#ffcc66',
+    }).setOrigin(0.5);
+    this.panelContainer.add(title);
+    this._addCloseButton(px + pw - 20, py + 14);
+
+    let yOff = py + 45;
+    const btnW = pw - 40;
+    const btnH = 32;
+
+    const createBtn = (label, color, callback) => {
+      const btnBg = this.add.graphics();
+      btnBg.fillStyle(color, 0.9);
+      btnBg.fillRect(px + 20, yOff, btnW, btnH);
+      btnBg.lineStyle(1, 0x6a6a9e);
+      btnBg.strokeRect(px + 20, yOff, btnW, btnH);
+      this.panelContainer.add(btnBg);
+
+      const btnText = this.add.text(px + 20 + btnW / 2, yOff + btnH / 2, label, {
+        fontSize: '12px', fontFamily: 'monospace', color: '#ffffff',
+      }).setOrigin(0.5);
+      this.panelContainer.add(btnText);
+
+      const zone = this.add.zone(px + 20 + btnW / 2, yOff + btnH / 2, btnW, btnH)
+        .setInteractive().setDepth(3001);
+      this.panelContainer.add(zone);
+
+      zone.on('pointerover', () => { btnBg.setAlpha(0.7); });
+      zone.on('pointerout', () => { btnBg.setAlpha(1); });
+      zone.on('pointerdown', () => { callback(); this._closePanel(); });
+
+      yOff += btnH + 8;
+    };
+
+    // Save info
+    const hasSave = this.saveSystem.hasSave();
+    const hasAuto = this.saveSystem.hasAutoSave();
+    const infoText = this.add.text(px + 20, yOff,
+      `수동 저장: ${hasSave ? '있음' : '없음'}  |  자동 저장: ${hasAuto ? '있음' : '없음'}`, {
+      fontSize: '10px', fontFamily: 'monospace', color: '#888899',
+    });
+    this.panelContainer.add(infoText);
+    yOff += 20;
+
+    const playTime = this.add.text(px + 20, yOff,
+      `플레이 시간: ${this.saveSystem.getPlayTime()}`, {
+      fontSize: '10px', fontFamily: 'monospace', color: '#888899',
+    });
+    this.panelContainer.add(playTime);
+    yOff += 24;
+
+    createBtn('💾 저장하기 (F5)', 0x2a4a2e, () => this._doSave());
+    createBtn('📂 불러오기 (F9)', 0x2a2a4e, () => this._doLoadLast());
+
+    if (hasAuto) {
+      createBtn('🔄 자동저장 불러오기', 0x3a3a2e, () => {
+        const data = this.saveSystem.load('murimAdventure_autosave');
+        if (data) this._applyLoadData(data);
+        else this._showSaveNotification('자동저장 데이터 없음!', false);
+      });
+    }
+
+    createBtn('📥 파일로 내보내기', 0x2a3a4e, () => {
+      const ws = this.worldScene;
+      if (ws && ws.player) {
+        this.saveSystem.exportToFile(ws.player, ws.mapId || 'field_01', ws.proficiencySystem);
+      }
+    });
+
+    createBtn('📤 파일에서 가져오기', 0x4a2a2e, () => {
+      this.saveSystem.importFromFile().then((data) => {
+        if (data) {
+          this._applyLoadData(data);
+        } else {
+          this._showSaveNotification('가져오기 실패!', false);
+        }
+      });
+    });
+  }
+
+  _showSaveNotification(msg, success) {
+    const { width } = this.cameras.main;
+    const color = success ? '#44ff88' : '#ff6666';
+    const text = this.add.text(width / 2, 120, msg, {
+      fontSize: '16px', fontFamily: 'monospace', color,
+      stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(5000);
+
+    this.tweens.add({
+      targets: text,
+      y: 90,
+      alpha: 0,
+      duration: 1500,
+      ease: 'Power2',
       onComplete: () => text.destroy(),
     });
   }

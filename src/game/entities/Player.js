@@ -11,20 +11,41 @@ import {
 import { EQUIPMENT_SLOTS } from '../../data/constants.js';
 
 // Map weapon types to equipment layer texture keys
-const WEAPON_SPRITE_MAP = {
+// Map weapon type to visual sprite (primary)
+const WEAPON_TYPE_SPRITE_MAP = {
+  SWORD: 'equip_weapon_sword',
+  BLADE: 'equip_weapon_sword',
+  SPEAR: 'equip_weapon_spear',
+  STAFF: 'equip_weapon_staff',
+  HIDDEN: 'equip_weapon_dual',
+  WHIP: 'equip_weapon_sword',
+  FIST: 'equip_weapon_dual',
+  EXOTIC: 'equip_weapon_staff',
+};
+
+// Fallback: map grip to sprite
+const WEAPON_GRIP_SPRITE_MAP = {
   ONE_HANDED: 'equip_weapon_sword',
   TWO_HANDED: 'equip_weapon_spear',
   DUAL_WIELD: 'equip_weapon_dual',
 };
 
-// Map rarity to overlay tint
+// Map rarity grade to overlay tint (lower grade = stronger tint)
 const RARITY_TINT = {
-  COMMON: null,
-  UNCOMMON: 0x88ff88,
-  RARE: 0x4488ff,
-  EPIC: 0xaa44ff,
-  LEGENDARY: 0xffaa00,
-  MYTHIC: 0xff4444,
+  GRADE_13: null,
+  GRADE_12: null,
+  GRADE_11: 0xcccccc,
+  GRADE_10: 0x00ccff,
+  GRADE_9: 0x1eff00,
+  GRADE_8: 0x0070dd,
+  GRADE_7: 0xff8000,
+  GRADE_6: 0xa335ee,
+  GRADE_5: 0xe6cc80,
+  GRADE_4: 0xccff00,
+  GRADE_3: 0xffcc00,
+  GRADE_2: 0xff8800,
+  GRADE_1: 0xff4400,
+  GRADE_0: 0xff0000,
 };
 
 export default class Player extends Phaser.Physics.Arcade.Sprite {
@@ -63,6 +84,12 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     // --- Skill cooldowns: { skillId: lastUsedTimestamp } ---
     this.skillCooldowns = {};
 
+    // --- Active skill durations: { skillId: { startTime, duration, effects } } ---
+    this.activeSkillEffects = {};
+
+    // --- Channel effects: { skillId: { startTime, duration, stat, percentPerSec } } ---
+    this.channelEffects = {};
+
     // --- Movement ---
     this.moveSpeed = this.stats.MOVE_SPEED || 160;
     this.facing = 'down';
@@ -76,6 +103,9 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     // --- Buffs: array of { stat, amount, duration, startTime } ---
     this.buffs = [];
+
+    // --- Regen timer ---
+    this._regenAccum = 0;
 
     // Equip starting gear
     this._equipStartingGear();
@@ -125,7 +155,9 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       let textureKey;
 
       if (layer.slot === 'WEAPON') {
-        textureKey = WEAPON_SPRITE_MAP[equipped.weaponType] || 'equip_weapon_sword';
+        textureKey = WEAPON_TYPE_SPRITE_MAP[equipped.weaponType]
+          || WEAPON_GRIP_SPRITE_MAP[equipped.weaponGrip]
+          || 'equip_weapon_sword';
       } else if (layer.textures) {
         // Pick texture based on rarity
         const rIdx = ['COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY', 'MYTHIC'];
@@ -221,7 +253,17 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   performBasicAttack() {
     const now = Date.now();
     const computed = this.getComputedStats();
-    const cd = Math.max(200, this.attackCooldown - (computed.ATK_SPEED || 0) * 2);
+
+    // Get weapon proficiency attack speed bonus
+    let atkSpdProfBonus = 0;
+    const weapon = this.equipment.WEAPON;
+    if (weapon && weapon.weaponType && this.scene.proficiencySystem) {
+      const bonuses = this.scene.proficiencySystem.getWeaponProfBonuses(weapon.weaponType);
+      atkSpdProfBonus = bonuses.atkSpdBonus || 0;
+    }
+
+    const totalAtkSpd = (computed.ATK_SPEED || 0) + atkSpdProfBonus;
+    const cd = Math.max(200, this.attackCooldown - totalAtkSpd * 2);
 
     if (now - this.lastAttackTime < cd) return null;
     if (this.isAttacking) return null;
@@ -252,9 +294,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       },
     });
 
-    // Gain weapon proficiency
+    // Gain weapon proficiency (weapon already declared above)
     this._updateProficiencyBonus();
-    const weapon = this.equipment.WEAPON;
     if (weapon && weapon.weaponType && this.scene.proficiencySystem) {
       this.scene.proficiencySystem.gainProficiency('weapon', weapon.weaponType, 3);
     }
@@ -355,9 +396,19 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     const now = Date.now();
 
+    // Check cooldown - show message if blocked
     const lastUsed = this.skillCooldowns[skillId] || 0;
-    if (now - lastUsed < (skill.cooldown || 0)) return null;
-    if (this.stats.MP < (skill.mpCost || 0)) return null;
+    const cdRemaining = (skill.cooldown || 0) - (now - lastUsed);
+    if (cdRemaining > 0) {
+      this._showSkillBlockedMessage(`재사용 대기 중 (${(cdRemaining / 1000).toFixed(1)}초)`);
+      return null;
+    }
+
+    // Check MP - show message if not enough
+    if (this.stats.MP < (skill.mpCost || 0)) {
+      this._showSkillBlockedMessage(`내력 부족! (필요: ${skill.mpCost}, 현재: ${Math.floor(this.stats.MP)})`);
+      return null;
+    }
 
     if (target && skill.range) {
       const dist = Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y);
@@ -465,8 +516,43 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
           results.push({ type: 'buff', stat: 'MOVE_SPEED' });
           break;
         }
+
+        case 'CHANNEL_REGEN': {
+          // Channeled regen effect (e.g. 운기조식)
+          this.channelEffects[skill.id] = {
+            startTime: Date.now(),
+            duration: effect.duration || skill.duration || 8000,
+            stat: effect.stat || 'MP',
+            percentPerSec: effect.percentPerSec || 10,
+          };
+
+          // Visual feedback
+          if (this.scene) {
+            const text = this.scene.add.text(this.x, this.y - 30, `${skill.nameKo} 시전!`, {
+              fontSize: '12px', fontFamily: 'monospace', color: '#88ddff',
+              stroke: '#000000', strokeThickness: 3,
+            });
+            text.setOrigin(0.5, 1).setDepth(1000);
+            this.scene.tweens.add({
+              targets: text, y: this.y - 60, alpha: 0, duration: 1500,
+              onComplete: () => text.destroy(),
+            });
+          }
+          results.push({ type: 'channel', stat: effect.stat });
+          break;
+        }
       }
     }
+
+    // Track skill duration if defined
+    if (skill.duration && skill.duration > 0) {
+      this.activeSkillEffects[skill.id] = {
+        startTime: Date.now(),
+        duration: skill.duration,
+        skillNameKo: skill.nameKo,
+      };
+    }
+
     return results.length > 0 ? results[0] : null;
   }
 
@@ -523,6 +609,30 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     } else {
       this.proficiencyBonus = 1.0;
     }
+  }
+
+  _showSkillBlockedMessage(msg) {
+    if (!this.scene) return;
+    // Throttle: don't spam messages
+    const now = Date.now();
+    if (this._lastBlockedMsgTime && now - this._lastBlockedMsgTime < 500) return;
+    this._lastBlockedMsgTime = now;
+
+    const text = this.scene.add.text(this.x, this.y - 40, msg, {
+      fontSize: '11px',
+      fontFamily: 'monospace',
+      color: '#ff8888',
+      stroke: '#000000',
+      strokeThickness: 3,
+    });
+    text.setOrigin(0.5, 1).setDepth(1000);
+    this.scene.tweens.add({
+      targets: text,
+      y: this.y - 70,
+      alpha: 0,
+      duration: 1200,
+      onComplete: () => text.destroy(),
+    });
   }
 
   // ==========================================================================
@@ -651,7 +761,17 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     for (const slotKey of Object.keys(this.equipment)) {
       const item = this.equipment[slotKey];
-      if (item && item.stats) {
+      if (!item) continue;
+
+      // Add base weapon stats (ATK, ATK_SPEED from baseATK/baseATK_SPEED)
+      if (item.baseATK) computed.ATK = (computed.ATK || 0) + item.baseATK;
+      if (item.baseATK_SPEED) computed.ATK_SPEED = (computed.ATK_SPEED || 0) + item.baseATK_SPEED;
+
+      // Add base armor DEF
+      if (item.baseDEF) computed.DEF = (computed.DEF || 0) + item.baseDEF;
+
+      // Add additional stats
+      if (item.stats) {
         for (const [stat, value] of Object.entries(item.stats)) {
           computed[stat] = (computed[stat] || 0) + value;
         }
@@ -676,9 +796,48 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   // ==========================================================================
 
   update(time, delta) {
-    // Remove expired buffs
     const now = Date.now();
+
+    // Remove expired buffs
     this.buffs = this.buffs.filter((b) => now - b.startTime < b.duration);
+
+    // --- Expire active skill effects ---
+    for (const [skillId, data] of Object.entries(this.activeSkillEffects)) {
+      if (now - data.startTime >= data.duration) {
+        delete this.activeSkillEffects[skillId];
+      }
+    }
+
+    // --- Channel effects (운기조식 등) ---
+    for (const [skillId, ch] of Object.entries(this.channelEffects)) {
+      if (now - ch.startTime >= ch.duration) {
+        delete this.channelEffects[skillId];
+        continue;
+      }
+      // Apply regen per second (delta is in ms)
+      const regenPerMs = (ch.percentPerSec / 100) * this.stats['max' + ch.stat] / 1000;
+      const amount = regenPerMs * delta;
+      const maxKey = 'max' + ch.stat;
+      this.stats[ch.stat] = Math.min(this.stats[maxKey], this.stats[ch.stat] + amount);
+    }
+
+    // --- HP/MP regen from stats (every 2 seconds) ---
+    this._regenAccum += delta;
+    if (this._regenAccum >= 2000) {
+      this._regenAccum = 0;
+      const computed = this.getComputedStats();
+      const hpRegen = computed.HP_REGEN || 0;
+      const mpRegen = computed.MP_REGEN || 0;
+      if (hpRegen > 0 && this.stats.HP < this.stats.maxHP) {
+        this.stats.HP = Math.min(this.stats.maxHP, this.stats.HP + hpRegen);
+      }
+      if (mpRegen > 0 && this.stats.MP < this.stats.maxMP) {
+        this.stats.MP = Math.min(this.stats.maxMP, this.stats.MP + mpRegen);
+      }
+      if ((hpRegen > 0 || mpRegen > 0) && this.scene) {
+        this.scene.events.emit('player-stats-changed');
+      }
+    }
 
     // Sync equipment layer positions
     this._syncEquipmentLayerPositions();

@@ -49,10 +49,32 @@ export default class CombatSystem {
       baseDamage *= attacker.proficiencyBonus;
     }
 
+    // Apply weapon proficiency damage bonus
+    const weaponProfBonus = this._getWeaponProfBonuses(attacker);
+    if (weaponProfBonus.dmgBonus > 0) {
+      baseDamage *= (1 + weaponProfBonus.dmgBonus / 100);
+    }
+
+    // Apply attacker's DMG_BONUS (가하는 피해증가 %)
+    const dmgBonus = aStats.DMG_BONUS || 0;
+    if (dmgBonus !== 0) {
+      baseDamage *= (1 + dmgBonus / 100);
+    }
+
     // Subtract defense
     const defense = dStats.DEF || 0;
     const damageReduction = defense / (defense + 50); // diminishing returns
     let finalDamage = baseDamage * (1 - damageReduction);
+
+    // Apply defender's DMG_TAKEN (받는 피해증가 %)
+    // Base DMG_TAKEN is modified by DEF: higher DEF reduces DMG_TAKEN effect
+    // Formula: effective DMG_TAKEN = DMG_TAKEN - (DEF / 10), capped at -50% reduction
+    const rawDmgTaken = dStats.DMG_TAKEN || 0;
+    const defReduction = defense / 10; // DEF 50 → 5% 추가 감소
+    const effectiveDmgTaken = Math.max(-50, rawDmgTaken - defReduction);
+    if (effectiveDmgTaken !== 0) {
+      finalDamage *= (1 + effectiveDmgTaken / 100);
+    }
 
     // Minimum damage
     finalDamage = Math.max(1, Math.floor(finalDamage));
@@ -92,14 +114,33 @@ export default class CombatSystem {
       ? attacker.getComputedStats()
       : attacker.stats || attacker;
 
-    const critRate = aStats.CRIT_RATE || 5;
-    const critDmg = aStats.CRIT_DMG || 150;
+    let critRate = aStats.CRIT_RATE || 5;
+    let critDmg = aStats.CRIT_DMG || 150;
+
+    // Apply weapon proficiency bonuses to crit
+    const weaponProfBonus = this._getWeaponProfBonuses(attacker);
+    critRate += weaponProfBonus.critRateBonus;
+    critDmg += weaponProfBonus.critDmgBonus;
 
     const isCrit = Math.random() * 100 < critRate;
     return {
       isCrit,
       critMultiplier: isCrit ? critDmg / 100 : 1.0,
     };
+  }
+
+  /**
+   * Get weapon proficiency bonuses from the attacker's equipped weapon.
+   * @returns {{ dmgBonus, atkSpdBonus, critRateBonus, critDmgBonus }}
+   */
+  _getWeaponProfBonuses(attacker) {
+    const empty = { dmgBonus: 0, atkSpdBonus: 0, critRateBonus: 0, critDmgBonus: 0 };
+    if (!attacker.equipment || !attacker.equipment.WEAPON) return empty;
+    const weapon = attacker.equipment.WEAPON;
+    const weaponType = weapon.weaponType;
+    if (!weaponType) return empty;
+    if (!this.scene || !this.scene.proficiencySystem) return empty;
+    return this.scene.proficiencySystem.getWeaponProfBonuses(weaponType);
   }
 
   /**

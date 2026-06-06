@@ -23,6 +23,8 @@ export default class BootScene extends Phaser.Scene {
     this._generateUIElements();
     this._generateImpactEffects();
     this._generateItemPickup();
+    this._generateNPCSprites();
+    this._generatePortalTexture();
 
     this.scene.start('PreloadScene');
   }
@@ -813,22 +815,36 @@ export default class BootScene extends Phaser.Scene {
     const cx = s / 2;
     const cy = s / 2;
 
-    // --- Basic Attack Slash (검기) ---
+    // --- Basic Attack Slash (검기) - large white diagonal slash ---
     this._genTex('fx_slash', s, s, (g) => {
-      // Slash arc
-      g.lineStyle(4, 0xffffff, 0.9);
-      g.beginPath();
-      g.arc(cx, cy, 30, -2.2, -0.4, false);
-      g.strokePath();
-      g.lineStyle(2, 0xccddff, 0.7);
-      g.beginPath();
-      g.arc(cx, cy, 28, -2.0, -0.6, false);
-      g.strokePath();
-      // Speed lines
-      g.lineStyle(1, 0xffffff, 0.5);
-      g.lineBetween(cx - 20, cy - 10, cx + 10, cy - 30);
-      g.lineBetween(cx - 15, cy, cx + 20, cy - 20);
-      g.lineBetween(cx - 10, cy + 5, cx + 25, cy - 10);
+      // Main diagonal slash line (top-right to bottom-left)
+      // Outer glow
+      g.lineStyle(12, 0xffffff, 0.15);
+      g.lineBetween(cx + 38, cy - 38, cx - 38, cy + 38);
+      // Mid glow
+      g.lineStyle(8, 0xffffff, 0.3);
+      g.lineBetween(cx + 36, cy - 36, cx - 36, cy + 36);
+      // Bright core
+      g.lineStyle(4, 0xffffff, 0.85);
+      g.lineBetween(cx + 34, cy - 34, cx - 34, cy + 34);
+      // Sharp center
+      g.lineStyle(2, 0xffffff, 1.0);
+      g.lineBetween(cx + 32, cy - 32, cx - 32, cy + 32);
+
+      // Secondary thinner slash (slight offset for thickness feel)
+      g.lineStyle(2, 0xddddff, 0.5);
+      g.lineBetween(cx + 30, cy - 36, cx - 36, cy + 30);
+
+      // Slash tip sparks
+      g.fillStyle(0xffffff, 0.7);
+      g.fillCircle(cx + 32, cy - 32, 4);
+      g.fillCircle(cx - 32, cy + 32, 3);
+
+      // Speed lines perpendicular to slash
+      g.lineStyle(1, 0xffffff, 0.3);
+      g.lineBetween(cx + 10, cy - 20, cx + 24, cy - 6);
+      g.lineBetween(cx - 6, cy - 6, cx + 8, cy + 8);
+      g.lineBetween(cx - 20, cy + 8, cx - 6, cy + 22);
     });
 
     // --- Heavy Slash (강공격) ---
@@ -1037,6 +1053,461 @@ export default class BootScene extends Phaser.Scene {
       g.fillRect(5, 5, 6, 6);
       g.lineStyle(1, 0xffeeaa, 0.5);
       g.strokeRect(3, 3, 10, 10);
+    });
+  }
+
+  // ==========================================================================
+  // Utility
+  // ==========================================================================
+
+  // ==========================================================================
+  // NPC Sprites (64x64)
+  // ==========================================================================
+
+  _generateNPCSprites() {
+    const s = CHAR_SIZE;
+
+    // --- Village Elder (촌장 어른) - white beard, dark green/gold robes, walking stick ---
+    this._genTex('npc_elder', s, s, (g) => {
+      // Shadow
+      g.fillStyle(0x000000, 0.25);
+      g.fillEllipse(s / 2, s - 4, 28, 8);
+      // Shoes
+      g.fillStyle(0x3d2b1f);
+      g.fillRect(20, 54, 10, 6);
+      g.fillRect(34, 54, 10, 6);
+      // Legs (dark)
+      g.fillStyle(0x2a3a2a);
+      g.fillRect(22, 42, 8, 13);
+      g.fillRect(34, 42, 8, 13);
+      // Body (dark green robe)
+      g.fillStyle(0x1a4a2a);
+      g.fillRect(18, 20, 28, 24);
+      // Gold trim on robe
+      g.fillStyle(0xccaa33);
+      g.fillRect(18, 20, 28, 2);
+      g.fillRect(18, 42, 28, 2);
+      g.fillRect(30, 20, 2, 24);
+      // Robe overlap
+      g.fillStyle(0x225533);
+      g.fillRect(20, 22, 10, 18);
+      // Sash (gold)
+      g.fillStyle(0xddbb44);
+      g.fillRect(18, 38, 28, 3);
+      // Arms
+      g.fillStyle(0x1a4a2a);
+      g.fillRect(12, 24, 6, 14);
+      g.fillRect(46, 24, 6, 14);
+      // Hands
+      g.fillStyle(0xe8c098);
+      g.fillRect(12, 38, 6, 4);
+      g.fillRect(46, 38, 6, 4);
+      // Walking stick (right hand)
+      g.fillStyle(0x8B6914);
+      g.fillRect(52, 12, 3, 48);
+      g.fillStyle(0xA07828);
+      g.fillRect(53, 12, 1, 48);
+      // Stick top ornament
+      g.fillStyle(0xccaa33);
+      g.fillRect(50, 10, 7, 4);
+      // Neck
+      g.fillStyle(0xe8c098);
+      g.fillRect(28, 16, 8, 5);
+      // Head
+      g.fillStyle(0xf0c8a0);
+      g.fillRect(24, 4, 16, 14);
+      // White hair
+      g.fillStyle(0xdddddd);
+      g.fillRect(22, 2, 20, 6);
+      g.fillRect(24, 0, 16, 4);
+      // Hair bun
+      g.fillStyle(0xcccccc);
+      g.fillRect(29, -1, 6, 4);
+      // Sideburns (white)
+      g.fillStyle(0xdddddd);
+      g.fillRect(22, 6, 3, 8);
+      g.fillRect(39, 6, 3, 8);
+      // White beard
+      g.fillStyle(0xeeeeee);
+      g.fillRect(26, 16, 12, 8);
+      g.fillRect(28, 24, 8, 4);
+      g.fillRect(30, 28, 4, 2);
+      g.fillStyle(0xdddddd);
+      g.fillRect(27, 17, 10, 6);
+      // Eyes (wise, narrow)
+      g.fillStyle(0x222222);
+      g.fillRect(27, 10, 4, 2);
+      g.fillRect(35, 10, 4, 2);
+      // Eyebrows (white, thick)
+      g.fillStyle(0xdddddd);
+      g.fillRect(26, 8, 6, 2);
+      g.fillRect(34, 8, 6, 2);
+    });
+
+    // --- Blacksmith (대장장이) - muscular, leather apron, hammer, headband ---
+    this._genTex('npc_blacksmith', s, s, (g) => {
+      // Shadow
+      g.fillStyle(0x000000, 0.25);
+      g.fillEllipse(s / 2, s - 4, 30, 8);
+      // Shoes (heavy boots)
+      g.fillStyle(0x332211);
+      g.fillRect(18, 54, 12, 6);
+      g.fillRect(34, 54, 12, 6);
+      // Legs (thick)
+      g.fillStyle(0x3a3a3a);
+      g.fillRect(20, 40, 10, 15);
+      g.fillRect(34, 40, 10, 15);
+      // Body (broad, bare chest visible)
+      g.fillStyle(0xd0a878);
+      g.fillRect(16, 20, 32, 22);
+      // Leather apron (brown)
+      g.fillStyle(0x6B4226);
+      g.fillRect(20, 24, 24, 20);
+      g.fillStyle(0x7B5236);
+      g.fillRect(22, 26, 20, 16);
+      // Apron strap
+      g.fillStyle(0x5B3216);
+      g.fillRect(26, 18, 4, 8);
+      g.fillRect(34, 18, 4, 8);
+      // Belt
+      g.fillStyle(0x443322);
+      g.fillRect(18, 40, 28, 3);
+      // Arms (muscular, bare)
+      g.fillStyle(0xd0a878);
+      g.fillRect(10, 22, 8, 16);
+      g.fillRect(46, 22, 8, 16);
+      // Bicep detail
+      g.fillStyle(0xc09868);
+      g.fillRect(11, 24, 6, 4);
+      g.fillRect(47, 24, 6, 4);
+      // Hands
+      g.fillStyle(0xc09868);
+      g.fillRect(10, 38, 8, 5);
+      g.fillRect(46, 38, 8, 5);
+      // Hammer (left hand)
+      g.fillStyle(0x775533);
+      g.fillRect(6, 28, 3, 22);
+      // Hammer head
+      g.fillStyle(0x888899);
+      g.fillRect(2, 24, 10, 6);
+      g.fillStyle(0x999aaa);
+      g.fillRect(3, 25, 8, 4);
+      // Neck
+      g.fillStyle(0xd0a878);
+      g.fillRect(28, 16, 8, 5);
+      // Head
+      g.fillStyle(0xd0a878);
+      g.fillRect(24, 4, 16, 14);
+      // Headband (red)
+      g.fillStyle(0xcc3333);
+      g.fillRect(22, 4, 20, 4);
+      g.fillStyle(0xdd4444);
+      g.fillRect(23, 5, 18, 2);
+      // Headband tail
+      g.fillStyle(0xcc3333);
+      g.fillRect(42, 5, 5, 3);
+      // Hair (short, dark)
+      g.fillStyle(0x222222);
+      g.fillRect(24, 2, 16, 4);
+      // Stubble / jaw
+      g.fillStyle(0xb09060);
+      g.fillRect(24, 14, 16, 4);
+      // Eyes (determined)
+      g.fillStyle(0x111111);
+      g.fillRect(27, 9, 3, 3);
+      g.fillRect(34, 9, 3, 3);
+      g.fillStyle(0xffffff);
+      g.fillRect(28, 9, 1, 1);
+      g.fillRect(35, 9, 1, 1);
+      // Thick eyebrows
+      g.fillStyle(0x222222);
+      g.fillRect(26, 7, 5, 2);
+      g.fillRect(33, 7, 5, 2);
+      // Mouth
+      g.fillStyle(0x995544);
+      g.fillRect(30, 15, 4, 1);
+    });
+
+    // --- Merchant (상인) - purple/red robes, bag, hat ---
+    this._genTex('npc_merchant', s, s, (g) => {
+      // Shadow
+      g.fillStyle(0x000000, 0.25);
+      g.fillEllipse(s / 2, s - 4, 28, 8);
+      // Shoes
+      g.fillStyle(0x443322);
+      g.fillRect(20, 54, 10, 6);
+      g.fillRect(34, 54, 10, 6);
+      // Legs
+      g.fillStyle(0x553344);
+      g.fillRect(22, 42, 8, 13);
+      g.fillRect(34, 42, 8, 13);
+      // Body (purple/red robes)
+      g.fillStyle(0x662244);
+      g.fillRect(18, 20, 28, 24);
+      g.fillStyle(0x883366);
+      g.fillRect(20, 22, 24, 20);
+      // Robe details - gold buttons
+      g.fillStyle(0xddbb44);
+      g.fillRect(31, 24, 2, 2);
+      g.fillRect(31, 29, 2, 2);
+      g.fillRect(31, 34, 2, 2);
+      // Sash
+      g.fillStyle(0xcc6633);
+      g.fillRect(18, 38, 28, 3);
+      // Arms
+      g.fillStyle(0x662244);
+      g.fillRect(12, 24, 6, 14);
+      g.fillRect(46, 24, 6, 14);
+      // Hands
+      g.fillStyle(0xf0c8a0);
+      g.fillRect(12, 38, 6, 4);
+      g.fillRect(46, 38, 6, 4);
+      // Bag (on back / right side)
+      g.fillStyle(0x886644);
+      g.fillRect(48, 28, 12, 14);
+      g.fillStyle(0x997755);
+      g.fillRect(50, 30, 8, 10);
+      // Bag strap
+      g.fillStyle(0x665533);
+      g.fillRect(46, 22, 3, 8);
+      // Neck
+      g.fillStyle(0xf0c8a0);
+      g.fillRect(28, 16, 8, 5);
+      // Head
+      g.fillStyle(0xf0c8a0);
+      g.fillRect(24, 4, 16, 14);
+      // Hat (wide merchant hat)
+      g.fillStyle(0x663344);
+      g.fillRect(18, 2, 28, 6);
+      g.fillRect(22, 0, 20, 3);
+      // Hat brim
+      g.fillStyle(0x552233);
+      g.fillRect(16, 6, 32, 2);
+      // Eyes (shrewd)
+      g.fillStyle(0x222222);
+      g.fillRect(27, 10, 3, 2);
+      g.fillRect(34, 10, 3, 2);
+      g.fillStyle(0xffffff);
+      g.fillRect(28, 10, 1, 1);
+      g.fillRect(35, 10, 1, 1);
+      // Mustache
+      g.fillStyle(0x222222);
+      g.fillRect(27, 14, 10, 2);
+      g.fillRect(26, 14, 2, 1);
+      g.fillRect(36, 14, 2, 1);
+      // Smile
+      g.fillStyle(0xcc8877);
+      g.fillRect(30, 16, 4, 1);
+    });
+
+    // --- Guard (경비병) - light armor, spear, helmet ---
+    this._genTex('npc_guard', s, s, (g) => {
+      // Shadow
+      g.fillStyle(0x000000, 0.25);
+      g.fillEllipse(s / 2, s - 4, 28, 8);
+      // Shoes (armored boots)
+      g.fillStyle(0x555566);
+      g.fillRect(20, 54, 10, 6);
+      g.fillRect(34, 54, 10, 6);
+      // Legs (leg guards)
+      g.fillStyle(0x666677);
+      g.fillRect(22, 40, 8, 15);
+      g.fillRect(34, 40, 8, 15);
+      // Shin guards
+      g.fillStyle(0x777788);
+      g.fillRect(22, 46, 8, 6);
+      g.fillRect(34, 46, 8, 6);
+      // Body (light armor / chainmail)
+      g.fillStyle(0x888899);
+      g.fillRect(18, 20, 28, 22);
+      g.fillStyle(0x999aaa);
+      g.fillRect(20, 22, 24, 18);
+      // Armor plate detail
+      g.fillStyle(0xaaaabb);
+      g.fillRect(22, 24, 8, 14);
+      g.fillRect(34, 24, 8, 14);
+      // Belt
+      g.fillStyle(0x664422);
+      g.fillRect(18, 40, 28, 3);
+      g.fillStyle(0xccaa33);
+      g.fillRect(30, 39, 4, 5);
+      // Shoulder plates
+      g.fillStyle(0x777788);
+      g.fillRect(12, 20, 8, 8);
+      g.fillRect(44, 20, 8, 8);
+      // Arms
+      g.fillStyle(0x888899);
+      g.fillRect(12, 28, 6, 10);
+      g.fillRect(46, 28, 6, 10);
+      // Hands (gauntlets)
+      g.fillStyle(0x777788);
+      g.fillRect(12, 38, 6, 4);
+      g.fillRect(46, 38, 6, 4);
+      // Spear (right hand)
+      g.fillStyle(0x886644);
+      g.fillRect(52, 6, 2, 50);
+      // Spear head
+      g.fillStyle(0xccccdd);
+      g.fillRect(50, 0, 6, 8);
+      g.fillRect(51, -2, 4, 3);
+      // Red tassel on spear
+      g.fillStyle(0xcc3333);
+      g.fillRect(49, 8, 3, 5);
+      g.fillRect(54, 8, 3, 5);
+      // Neck
+      g.fillStyle(0xf0c8a0);
+      g.fillRect(28, 16, 8, 5);
+      // Head
+      g.fillStyle(0xf0c8a0);
+      g.fillRect(24, 6, 16, 12);
+      // Helmet
+      g.fillStyle(0x777788);
+      g.fillRect(22, 2, 20, 8);
+      g.fillRect(20, 4, 24, 4);
+      // Helmet visor
+      g.fillStyle(0x666677);
+      g.fillRect(22, 8, 20, 2);
+      // Helmet crest
+      g.fillStyle(0xcc3333);
+      g.fillRect(30, 0, 4, 4);
+      // Eyes (alert)
+      g.fillStyle(0x222222);
+      g.fillRect(27, 10, 3, 3);
+      g.fillRect(34, 10, 3, 3);
+      g.fillStyle(0xffffff);
+      g.fillRect(28, 10, 1, 1);
+      g.fillRect(35, 10, 1, 1);
+      // Mouth
+      g.fillStyle(0xcc8877);
+      g.fillRect(30, 15, 4, 1);
+    });
+
+    // --- Herbalist (약초꾼) - green robes, herbs, hair in bun ---
+    this._genTex('npc_herbalist', s, s, (g) => {
+      // Shadow
+      g.fillStyle(0x000000, 0.25);
+      g.fillEllipse(s / 2, s - 4, 26, 8);
+      // Shoes (cloth)
+      g.fillStyle(0x554433);
+      g.fillRect(22, 54, 8, 6);
+      g.fillRect(34, 54, 8, 6);
+      // Legs / skirt
+      g.fillStyle(0x337744);
+      g.fillRect(20, 40, 24, 15);
+      g.fillStyle(0x448855);
+      g.fillRect(22, 42, 20, 11);
+      // Body (green robes, more elegant)
+      g.fillStyle(0x337744);
+      g.fillRect(20, 20, 24, 22);
+      g.fillStyle(0x448855);
+      g.fillRect(22, 22, 20, 18);
+      // Floral pattern on robe
+      g.fillStyle(0x66aa77);
+      g.fillRect(26, 28, 3, 3);
+      g.fillRect(35, 32, 3, 3);
+      // Sash (light green)
+      g.fillStyle(0x88cc88);
+      g.fillRect(20, 38, 24, 3);
+      // Arms (slender)
+      g.fillStyle(0x337744);
+      g.fillRect(14, 24, 6, 12);
+      g.fillRect(44, 24, 6, 12);
+      // Hands
+      g.fillStyle(0xf0c8a0);
+      g.fillRect(14, 36, 6, 4);
+      g.fillRect(44, 36, 6, 4);
+      // Herb bundle (left hand)
+      g.fillStyle(0x44aa44);
+      g.fillRect(8, 30, 8, 10);
+      g.fillStyle(0x66cc66);
+      g.fillRect(9, 31, 6, 3);
+      g.fillRect(10, 37, 4, 3);
+      // Small flowers
+      g.fillStyle(0xffaa88);
+      g.fillRect(9, 31, 2, 2);
+      g.fillStyle(0xffff88);
+      g.fillRect(13, 33, 2, 2);
+      g.fillStyle(0xaa88ff);
+      g.fillRect(11, 37, 2, 2);
+      // Neck
+      g.fillStyle(0xf5d0a8);
+      g.fillRect(28, 16, 8, 5);
+      // Head (slightly rounder, feminine)
+      g.fillStyle(0xf5d0a8);
+      g.fillRect(24, 4, 16, 14);
+      // Hair (dark, in bun)
+      g.fillStyle(0x1a1a2a);
+      g.fillRect(22, 2, 20, 6);
+      g.fillRect(24, 0, 16, 4);
+      // Hair bun (top)
+      g.fillStyle(0x222233);
+      g.fillRect(28, -2, 8, 5);
+      g.fillRect(30, -3, 4, 3);
+      // Hair pin (jade)
+      g.fillStyle(0x44cc88);
+      g.fillRect(27, 0, 10, 1);
+      g.fillStyle(0x55ddaa);
+      g.fillRect(36, -1, 3, 3);
+      // Side hair
+      g.fillStyle(0x1a1a2a);
+      g.fillRect(22, 6, 3, 10);
+      g.fillRect(39, 6, 3, 10);
+      // Eyes (gentle)
+      g.fillStyle(0x332222);
+      g.fillRect(27, 10, 3, 2);
+      g.fillRect(34, 10, 3, 2);
+      g.fillStyle(0xffffff);
+      g.fillRect(28, 10, 1, 1);
+      g.fillRect(35, 10, 1, 1);
+      // Eyelashes
+      g.fillStyle(0x222222);
+      g.fillRect(27, 9, 4, 1);
+      g.fillRect(34, 9, 4, 1);
+      // Gentle smile
+      g.fillStyle(0xcc8877);
+      g.fillRect(30, 15, 4, 1);
+      g.fillStyle(0xdd9988);
+      g.fillRect(31, 14, 2, 1);
+    });
+  }
+
+  // ==========================================================================
+  // Portal Texture (32x32)
+  // ==========================================================================
+
+  _generatePortalTexture() {
+    this._genTex('portal', TILE_SIZE, TILE_SIZE, (g) => {
+      const cx = TILE_SIZE / 2;
+      const cy = TILE_SIZE / 2;
+
+      // Outer glow ring
+      g.lineStyle(3, 0x2244aa, 0.3);
+      g.strokeCircle(cx, cy, 14);
+
+      // Mid ring
+      g.lineStyle(2, 0x4488ff, 0.5);
+      g.strokeCircle(cx, cy, 11);
+
+      // Inner ring
+      g.lineStyle(2, 0x88ccff, 0.7);
+      g.strokeCircle(cx, cy, 8);
+
+      // Core glow
+      g.fillStyle(0xaaddff, 0.5);
+      g.fillCircle(cx, cy, 6);
+
+      // Bright center
+      g.fillStyle(0xeeffff, 0.7);
+      g.fillCircle(cx, cy, 3);
+
+      // Sparkle particles
+      g.fillStyle(0xffffff, 0.8);
+      g.fillRect(cx - 1, cy - 12, 2, 2);
+      g.fillRect(cx + 10, cy - 4, 2, 2);
+      g.fillRect(cx - 10, cy + 3, 2, 2);
+      g.fillRect(cx + 3, cy + 11, 2, 2);
+      g.fillRect(cx - 6, cy - 9, 1, 1);
+      g.fillRect(cx + 8, cy + 7, 1, 1);
     });
   }
 

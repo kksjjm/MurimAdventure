@@ -71,7 +71,7 @@ export default class ProficiencySystem {
   }
 
   /**
-   * Get stat bonus multiplier from proficiency.
+   * Get stat bonus multiplier from proficiency (legacy - damage only).
    * @param {'weapon'|'skill'} type
    * @param {string} id
    * @returns {number} stat multiplier (1.0 = no bonus)
@@ -79,6 +79,21 @@ export default class ProficiencySystem {
   getProficiencyBonus(type, id) {
     const level = this.getProficiencyLevel(type, id);
     return level.statMultiplier || 1.0;
+  }
+
+  /**
+   * Get detailed weapon proficiency bonuses.
+   * @param {string} weaponType - WEAPON_TYPES key (SWORD, BLADE, etc.)
+   * @returns {{ dmgBonus: number, atkSpdBonus: number, critRateBonus: number, critDmgBonus: number }}
+   */
+  getWeaponProfBonuses(weaponType) {
+    const level = this.getProficiencyLevel('weapon', weaponType);
+    return {
+      dmgBonus: level.dmgBonus || 0,
+      atkSpdBonus: level.atkSpdBonus || 0,
+      critRateBonus: level.critRateBonus || 0,
+      critDmgBonus: level.critDmgBonus || 0,
+    };
   }
 
   /**

@@ -1,5 +1,5 @@
 // =============================================================================
-// WorldScene.js - Main game world with tilemap, player, monsters, items
+// DarkForestScene.js - Dark forest map with harder monsters
 // =============================================================================
 
 import Phaser from 'phaser';
@@ -11,16 +11,14 @@ import SkillCombinationSystem from '../systems/SkillCombinationSystem.js';
 import ImpactSystem from '../systems/ImpactSystem.js';
 import MapTransitionSystem from '../systems/MapTransitionSystem.js';
 import { getMapData } from '../data/mapData.js';
-import { MONSTERS_BY_ID, ITEMS_BY_ID, SPAWN_CONFIG } from '../../data/defaultData.js';
+import { MONSTERS_BY_ID, ITEMS_BY_ID } from '../../data/defaultData.js';
 
 const TILE_SIZE = 32;
-const MAP_W = 50;
-const MAP_H = 50;
 const PORTAL_RANGE = 40;
 
-export default class WorldScene extends Phaser.Scene {
+export default class DarkForestScene extends Phaser.Scene {
   constructor() {
-    super({ key: 'WorldScene' });
+    super({ key: 'DarkForestScene' });
   }
 
   init(data) {
@@ -28,29 +26,41 @@ export default class WorldScene extends Phaser.Scene {
   }
 
   create() {
-    this.mapId = 'field_01';
+    this.mapId = 'dark_forest';
     this._transitioning = false;
+
+    const mapData = getMapData(this.mapId);
+    if (!mapData) {
+      console.error('[DarkForestScene] No map data for dark_forest');
+      return;
+    }
+
+    this.mapConfig = mapData;
+    this.mapTiles = mapData.tiles;
+    const MAP_W = mapData.width;
+    const MAP_H = mapData.height;
+
     // --- Systems ---
     this.combatSystem = new CombatSystem(this);
     this.proficiencySystem = new ProficiencySystem(this);
     this.skillCombinationSystem = new SkillCombinationSystem(this);
     this.impactSystem = new ImpactSystem(this);
 
-    // --- Generate tilemap ---
-    this.mapData = this._generateMap();
-    this._renderMap();
+    // --- Render tilemap ---
+    this._renderMap(MAP_W, MAP_H);
 
     // --- World bounds ---
     this.physics.world.setBounds(0, 0, MAP_W * TILE_SIZE, MAP_H * TILE_SIZE);
 
     // --- Player ---
-    const spTileX = this.initData.spawnX || 25;
-    const spTileY = this.initData.spawnY || 25;
-    const spawnX = spTileX * TILE_SIZE + TILE_SIZE / 2;
-    const spawnY = spTileY * TILE_SIZE + TILE_SIZE / 2;
-    this.player = new Player(this, spawnX, spawnY);
+    const spawnX = (this.initData.spawnX || mapData.spawns.player.x);
+    const spawnY = (this.initData.spawnY || mapData.spawns.player.y);
+    const px = spawnX * TILE_SIZE + TILE_SIZE / 2;
+    const py = spawnY * TILE_SIZE + TILE_SIZE / 2;
 
-    // Restore player data if transitioning from another scene
+    this.player = new Player(this, px, py);
+
+    // Restore player data
     if (this.initData.playerStats) {
       Object.assign(this.player.stats, this.initData.playerStats);
     }
@@ -69,7 +79,7 @@ export default class WorldScene extends Phaser.Scene {
 
     // --- Monsters ---
     this.monsters = this.physics.add.group({ classType: Monster, runChildUpdate: false });
-    this._spawnMonsters();
+    this._spawnMonsters(mapData.monsterConfig);
 
     // --- Item pickups ---
     this.itemPickups = this.physics.add.group();
@@ -77,17 +87,27 @@ export default class WorldScene extends Phaser.Scene {
     // --- Collisions ---
     this.physics.add.collider(this.player, this.wallLayer);
     this.physics.add.collider(this.monsters, this.wallLayer);
-    // Player <-> Monster collision (they cannot pass through each other)
     this.physics.add.collider(this.player, this.monsters);
-    // Monster <-> Monster collision
     this.physics.add.collider(this.monsters, this.monsters);
-
-    // Item pickup overlap
     this.physics.add.overlap(this.player, this.itemPickups, this._onItemPickup, null, this);
 
     // --- Camera ---
     this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
     this.cameras.main.setBounds(0, 0, MAP_W * TILE_SIZE, MAP_H * TILE_SIZE);
+
+    // Darker tint for the forest atmosphere
+    this.cameras.main.setBackgroundColor('#050510');
+    // Apply dark tint overlay
+    this._darkOverlay = this.add.graphics();
+    this._darkOverlay.setScrollFactor(0);
+    this._darkOverlay.setDepth(400);
+    this._darkOverlay.fillStyle(0x000022, 0.25);
+    this._darkOverlay.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
+
+    // --- Portals ---
+    this.portalZones = [];
+    this.portalLabels = [];
+    this._createPortals(mapData.portals);
 
     // --- Input ---
     this.cursors = this.input.keyboard.createCursorKeys();
@@ -97,11 +117,7 @@ export default class WorldScene extends Phaser.Scene {
       left: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
       right: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
     };
-
-    // Spacebar for basic attack
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-
-    // Skill hotkeys 1-5
     this.skillKeys = [
       this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
       this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO),
@@ -110,101 +126,34 @@ export default class WorldScene extends Phaser.Scene {
       this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.FIVE),
     ];
 
-    // Click to interact
     this.input.on('pointerdown', this._onPointerDown, this);
 
-    // --- Portals ---
-    this.portalZones = [];
-    this.portalLabels = [];
-    const mapData = getMapData(this.mapId);
-    if (mapData && mapData.portals) {
-      this._createPortals(mapData.portals);
-    }
-
     // --- Minimap ---
-    this._createMinimap();
+    this._createMinimap(MAP_W, MAP_H);
 
-    // --- Launch UI overlay scene ---
+    // --- Launch UI overlay ---
     this.scene.launch('UIScene', { worldScene: this });
 
-    // --- Show map name if coming from another map ---
-    if (this.initData.fromMap) {
-      MapTransitionSystem.showMapName(this, mapData ? mapData.nameKo : '녹림 평원');
-    }
-
-    // --- Respawn timer ---
+    // --- Respawn timer (faster in dark forest) ---
     this.time.addEvent({
-      delay: SPAWN_CONFIG.default.respawnTime || 15000,
-      callback: this._respawnMonsters,
+      delay: 12000,
+      callback: () => this._respawnMonsters(mapData.monsterConfig),
       callbackScope: this,
       loop: true,
     });
+
+    // --- Show map name ---
+    MapTransitionSystem.showMapName(this, mapData.nameKo);
 
     // --- Emit initial stats ---
     this.events.emit('player-stats-changed');
   }
 
   // ==========================================================================
-  // Map Generation
+  // Map Rendering
   // ==========================================================================
 
-  _generateMap() {
-    const map = [];
-    for (let y = 0; y < MAP_H; y++) {
-      const row = [];
-      for (let x = 0; x < MAP_W; x++) {
-        if (x === 0 || y === 0 || x === MAP_W - 1 || y === MAP_H - 1) {
-          row.push(4);
-          continue;
-        }
-
-        const val = this._simpleNoise(x, y);
-
-        if (val < 0.03) {
-          row.push(3); // water (rare, small puddles)
-        } else if (val < 0.10) {
-          row.push(1); // dirt
-        } else if (val < 0.14) {
-          row.push(2); // stone (walkable floor)
-        } else if (val < 0.17 && Math.random() < 0.15) {
-          row.push(5); // tree (sparse)
-        } else if (val > 0.95 && Math.random() < 0.1) {
-          row.push(4); // wall ruins (very rare)
-        } else {
-          row.push(0); // grass (dominant)
-        }
-      }
-      map.push(row);
-    }
-
-    // Clear spawn area (larger open area)
-    for (let y = 20; y <= 30; y++) {
-      for (let x = 20; x <= 30; x++) {
-        map[y][x] = 0;
-      }
-    }
-
-    // Create wider paths (3 tiles wide)
-    for (let x = 3; x < MAP_W - 3; x++) {
-      map[24][x] = 1;
-      map[25][x] = 1;
-      map[26][x] = 1;
-    }
-    for (let y = 3; y < MAP_H - 3; y++) {
-      map[y][24] = 1;
-      map[y][25] = 1;
-      map[y][26] = 1;
-    }
-
-    return map;
-  }
-
-  _simpleNoise(x, y) {
-    const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
-    return n - Math.floor(n);
-  }
-
-  _renderMap() {
+  _renderMap(MAP_W, MAP_H) {
     const tileKeys = ['tile_grass', 'tile_dirt', 'tile_stone', 'tile_water', 'tile_wall', 'tile_tree'];
 
     this.groundLayer = this.add.container(0, 0);
@@ -214,12 +163,17 @@ export default class WorldScene extends Phaser.Scene {
 
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < MAP_W; x++) {
-        const tileType = this.mapData[y][x];
+        const tileType = this.mapTiles[y][x];
         const px = x * TILE_SIZE + TILE_SIZE / 2;
         const py = y * TILE_SIZE + TILE_SIZE / 2;
 
         const sprite = this.add.image(px, py, tileKeys[tileType]);
         sprite.setDepth(0);
+
+        // Darken tree tiles slightly for atmosphere
+        if (tileType === 5) {
+          sprite.setTint(0x88aa88);
+        }
 
         if (tileType === 4 || tileType === 5 || tileType === 3) {
           const wall = this.wallLayer.create(px, py, tileKeys[tileType]);
@@ -232,13 +186,83 @@ export default class WorldScene extends Phaser.Scene {
   }
 
   // ==========================================================================
+  // Portals
+  // ==========================================================================
+
+  _createPortals(portals) {
+    if (!portals) return;
+
+    for (const portal of portals) {
+      const px = portal.x * TILE_SIZE + TILE_SIZE / 2;
+      const py = portal.y * TILE_SIZE + TILE_SIZE / 2;
+
+      const portalSprite = this.add.image(px, py, 'portal');
+      portalSprite.setDepth(5);
+      portalSprite.setAlpha(0.7);
+
+      this.tweens.add({
+        targets: portalSprite,
+        alpha: { from: 0.4, to: 0.9 },
+        scaleX: { from: 0.9, to: 1.1 },
+        scaleY: { from: 0.9, to: 1.1 },
+        duration: 1200,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+
+      const label = this.add.text(px, py - 24, portal.label, {
+        fontSize: '12px',
+        fontFamily: 'monospace',
+        color: '#aaddff',
+        stroke: '#000000',
+        strokeThickness: 2,
+      });
+      label.setOrigin(0.5, 1);
+      label.setDepth(100);
+      label.setVisible(false);
+
+      this.portalZones.push({
+        x: px, y: py,
+        targetMap: portal.targetMap,
+        targetX: portal.targetX,
+        targetY: portal.targetY,
+        label,
+        sprite: portalSprite,
+      });
+      this.portalLabels.push(label);
+    }
+  }
+
+  _checkPortals() {
+    for (const portal of this.portalZones) {
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y, portal.x, portal.y
+      );
+
+      if (dist < PORTAL_RANGE) {
+        portal.label.setVisible(true);
+        if (dist < 20) {
+          MapTransitionSystem.transition(this, portal.targetMap, portal.targetX, portal.targetY);
+          return;
+        }
+      } else {
+        portal.label.setVisible(false);
+      }
+    }
+  }
+
+  // ==========================================================================
   // Monster Spawning
   // ==========================================================================
 
-  _spawnMonsters() {
-    const config = SPAWN_CONFIG.default;
+  _spawnMonsters(config) {
+    if (!config) return;
 
-    for (let i = 0; i < config.monstersPerArea; i++) {
+    const MAP_W = this.mapConfig.width;
+    const MAP_H = this.mapConfig.height;
+
+    for (let i = 0; i < config.count; i++) {
       const typeIdx = this._weightedRandom(config.weights);
       const monsterId = config.types[Math.min(typeIdx, config.types.length - 1)];
       const monsterData = MONSTERS_BY_ID[monsterId];
@@ -247,11 +271,11 @@ export default class WorldScene extends Phaser.Scene {
       let sx, sy, tile;
       let attempts = 0;
       do {
-        sx = Math.floor(Math.random() * (MAP_W - 10)) + 5;
-        sy = Math.floor(Math.random() * (MAP_H - 10)) + 5;
-        tile = this.mapData[sy][sx];
+        sx = Math.floor(Math.random() * (MAP_W - 6)) + 3;
+        sy = Math.floor(Math.random() * (MAP_H - 6)) + 3;
+        tile = this.mapTiles[sy][sx];
         attempts++;
-      } while ((tile !== 0 && tile !== 1) || (Math.abs(sx - 25) < 5 && Math.abs(sy - 25) < 5) || attempts > 50);
+      } while ((tile !== 0 && tile !== 1) || attempts > 50);
 
       if (attempts > 50) continue;
 
@@ -263,12 +287,15 @@ export default class WorldScene extends Phaser.Scene {
     }
   }
 
-  _respawnMonsters() {
-    const aliveCount = this.monsters.getChildren().filter((m) => !m.isDead).length;
-    const config = SPAWN_CONFIG.default;
+  _respawnMonsters(config) {
+    if (!config) return;
 
-    if (aliveCount < config.monstersPerArea) {
-      const toSpawn = Math.min(2, config.monstersPerArea - aliveCount);
+    const aliveCount = this.monsters.getChildren().filter(m => !m.isDead).length;
+    if (aliveCount < config.count) {
+      const toSpawn = Math.min(3, config.count - aliveCount);
+      const MAP_W = this.mapConfig.width;
+      const MAP_H = this.mapConfig.height;
+
       for (let i = 0; i < toSpawn; i++) {
         const typeIdx = this._weightedRandom(config.weights);
         const monsterId = config.types[Math.min(typeIdx, config.types.length - 1)];
@@ -278,9 +305,9 @@ export default class WorldScene extends Phaser.Scene {
         let sx, sy, tile;
         let attempts = 0;
         do {
-          sx = Math.floor(Math.random() * (MAP_W - 10)) + 5;
-          sy = Math.floor(Math.random() * (MAP_H - 10)) + 5;
-          tile = this.mapData[sy][sx];
+          sx = Math.floor(Math.random() * (MAP_W - 6)) + 3;
+          sy = Math.floor(Math.random() * (MAP_H - 6)) + 3;
+          tile = this.mapTiles[sy][sx];
           attempts++;
         } while ((tile !== 0 && tile !== 1) || attempts > 30);
 
@@ -391,8 +418,9 @@ export default class WorldScene extends Phaser.Scene {
   // Minimap
   // ==========================================================================
 
-  _createMinimap() {
-    const mmSize = 150;
+  _createMinimap(MAP_W, MAP_H) {
+    this._mmW = MAP_W;
+    this._mmH = MAP_H;
 
     this.minimapGfx = this.add.graphics();
     this.minimapGfx.setScrollFactor(0);
@@ -402,35 +430,24 @@ export default class WorldScene extends Phaser.Scene {
     this.minimapPlayerDot.setScrollFactor(0);
     this.minimapPlayerDot.setDepth(501);
 
-    this.minimapVisible = true;
-    this._drawMinimap();
+    this._drawMinimap(MAP_W, MAP_H);
   }
 
-  _drawMinimap() {
-    if (!this.minimapVisible) {
-      this.minimapGfx.setVisible(false);
-      this.minimapPlayerDot.setVisible(false);
-      return;
-    }
-
-    this.minimapGfx.setVisible(true);
-    this.minimapPlayerDot.setVisible(true);
-
+  _drawMinimap(MAP_W, MAP_H) {
     const mmSize = 150;
     const mmX = this.cameras.main.width - mmSize - 10;
     const mmY = 10;
-    const tileScale = mmSize / MAP_W;
+    const tileScale = mmSize / Math.max(MAP_W, MAP_H);
 
     this.minimapGfx.clear();
-
     this.minimapGfx.fillStyle(0x000000, 0.7);
     this.minimapGfx.fillRect(mmX - 2, mmY - 2, mmSize + 4, mmSize + 4);
 
-    const tileColors = [0x3a7d44, 0x8b6c42, 0x888888, 0x2266bb, 0x555555, 0x225522];
+    const tileColors = [0x2a5d34, 0x6b4c22, 0x666666, 0x1144aa, 0x444444, 0x1a3a1a];
 
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < MAP_W; x++) {
-        const tileType = this.mapData[y][x];
+        const tileType = this.mapTiles[y][x];
         this.minimapGfx.fillStyle(tileColors[tileType], 0.9);
         this.minimapGfx.fillRect(
           mmX + x * tileScale,
@@ -441,13 +458,21 @@ export default class WorldScene extends Phaser.Scene {
       }
     }
 
+    // Portal indicators
+    for (const portal of this.portalZones) {
+      const ptx = mmX + (portal.x / (MAP_W * TILE_SIZE)) * mmSize;
+      const pty = mmY + (portal.y / (MAP_H * TILE_SIZE)) * mmSize;
+      this.minimapGfx.fillStyle(0x4488ff, 1);
+      this.minimapGfx.fillRect(ptx - 2, pty - 2, 4, 4);
+    }
+
     this.minimapGfx.lineStyle(1, 0x4a4a6e);
     this.minimapGfx.strokeRect(mmX - 2, mmY - 2, mmSize + 4, mmSize + 4);
   }
 
   _updateMinimapDots() {
-    if (!this.minimapVisible) return;
-
+    const MAP_W = this._mmW;
+    const MAP_H = this._mmH;
     const mmSize = 150;
     const mmX = this.cameras.main.width - mmSize - 10;
     const mmY = 10;
@@ -461,6 +486,7 @@ export default class WorldScene extends Phaser.Scene {
     this.minimapPlayerDot.fillStyle(0xffffff, 1);
     this.minimapPlayerDot.fillRect(px - 2, py - 2, 4, 4);
 
+    // Monster dots (red)
     for (const monster of this.monsters.getChildren()) {
       if (monster.isDead) continue;
       const mx = mmX + (monster.x / worldW) * mmSize;
@@ -470,17 +496,12 @@ export default class WorldScene extends Phaser.Scene {
     }
   }
 
-  toggleMinimap() {
-    this.minimapVisible = !this.minimapVisible;
-    this._drawMinimap();
-  }
-
   // ==========================================================================
   // Update
   // ==========================================================================
 
   update(time, delta) {
-    // Player movement (4-directional only)
+    // Player movement
     this.player.move(this.cursors, this.wasd, delta);
     this.player.update(time, delta);
 
@@ -512,75 +533,10 @@ export default class WorldScene extends Phaser.Scene {
     // Check portals
     this._checkPortals();
 
-    // HP/MP regen is handled by Player.update() using HP_REGEN/MP_REGEN stats
+    // HP/MP regen handled by Player.update() using HP_REGEN/MP_REGEN stats
 
     // Minimap
     this._updateMinimapDots();
-  }
-
-  // ==========================================================================
-  // Portals
-  // ==========================================================================
-
-  _createPortals(portals) {
-    for (const portal of portals) {
-      const px = portal.x * TILE_SIZE + TILE_SIZE / 2;
-      const py = portal.y * TILE_SIZE + TILE_SIZE / 2;
-
-      const portalSprite = this.add.image(px, py, 'portal');
-      portalSprite.setDepth(5);
-      portalSprite.setAlpha(0.7);
-
-      this.tweens.add({
-        targets: portalSprite,
-        alpha: { from: 0.4, to: 0.9 },
-        scaleX: { from: 0.9, to: 1.1 },
-        scaleY: { from: 0.9, to: 1.1 },
-        duration: 1200,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
-
-      const label = this.add.text(px, py - 24, portal.label, {
-        fontSize: '12px',
-        fontFamily: 'monospace',
-        color: '#aaddff',
-        stroke: '#000000',
-        strokeThickness: 2,
-      });
-      label.setOrigin(0.5, 1);
-      label.setDepth(100);
-      label.setVisible(false);
-
-      this.portalZones.push({
-        x: px, y: py,
-        targetMap: portal.targetMap,
-        targetX: portal.targetX,
-        targetY: portal.targetY,
-        label,
-        sprite: portalSprite,
-      });
-      this.portalLabels.push(label);
-    }
-  }
-
-  _checkPortals() {
-    for (const portal of this.portalZones) {
-      const dist = Phaser.Math.Distance.Between(
-        this.player.x, this.player.y, portal.x, portal.y
-      );
-
-      if (dist < PORTAL_RANGE) {
-        portal.label.setVisible(true);
-        if (dist < 20) {
-          MapTransitionSystem.transition(this, portal.targetMap, portal.targetX, portal.targetY);
-          return;
-        }
-      } else {
-        portal.label.setVisible(false);
-      }
-    }
   }
 
   _findNearestMonster(maxRange) {

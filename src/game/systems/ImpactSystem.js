@@ -40,18 +40,16 @@ export default class ImpactSystem {
   playBasicAttack(attacker, target, weapon) {
     const scene = this.scene;
 
-    // Determine effect based on weapon type
-    if (weapon && weapon.weaponType === 'DUAL_WIELD') {
-      // Double slash
+    // Determine effect based on weapon grip
+    const grip = weapon && weapon.weaponGrip;
+    if (grip === 'DUAL_WIELD') {
       this._playSlashEffect(target.x - 8, target.y, -0.3);
       scene.time.delayedCall(80, () => {
         this._playSlashEffect(target.x + 8, target.y, 0.3);
       });
-    } else if (weapon && weapon.weaponType === 'TWO_HANDED') {
-      // Heavy slash
+    } else if (grip === 'TWO_HANDED') {
       this._playHeavySlash(target.x, target.y);
     } else {
-      // Normal slash
       this._playSlashEffect(target.x, target.y, 0);
     }
 
@@ -147,18 +145,19 @@ export default class ImpactSystem {
 
     const fx = scene.add.sprite(attacker.x + ox, attacker.y + oy, 'fx_slash');
     fx.setDepth(999);
-    fx.setAlpha(0.5);
-    fx.setScale(0.6);
+    fx.setAlpha(0.6);
+    fx.setScale(0.8);
 
-    // Rotate based on facing
-    const rotations = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 };
+    // Rotate based on facing (+90 degrees clockwise correction)
+    const rotations = { right: Math.PI / 2, down: Math.PI, left: -Math.PI / 2, up: 0 };
     fx.setRotation(rotations[attacker.facing] || 0);
 
     scene.tweens.add({
       targets: fx,
       alpha: 0,
-      scaleX: 0.9,
-      scaleY: 0.9,
+      scaleX: 1.2,
+      scaleY: 1.2,
+      rotation: fx.rotation + 0.3,
       duration: 200,
       onComplete: () => fx.destroy(),
     });
@@ -182,17 +181,17 @@ export default class ImpactSystem {
     const scene = this.scene;
     const fx = scene.add.sprite(x, y, 'fx_slash');
     fx.setDepth(999);
-    fx.setAlpha(0.9);
-    fx.setScale(0.7);
-    fx.setRotation(angleOffset);
+    fx.setAlpha(0.95);
+    fx.setScale(1.1);
+    fx.setRotation(angleOffset + Math.PI / 2);
 
     scene.tweens.add({
       targets: fx,
       alpha: 0,
-      scaleX: 1.1,
-      scaleY: 1.1,
-      rotation: fx.rotation + 0.3,
-      duration: 250,
+      scaleX: 1.5,
+      scaleY: 1.5,
+      rotation: fx.rotation + 0.4,
+      duration: 220,
       ease: 'Power2',
       onComplete: () => fx.destroy(),
     });
