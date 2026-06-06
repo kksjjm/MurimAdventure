@@ -6,6 +6,15 @@ import {
   STATS, EQUIPMENT_SLOTS, WEAPON_TYPES, ITEM_RARITY, ITEM_TYPES
 } from '../../data/constants.js';
 
+const EQUIP_ANIM_SETS = [
+  { type: 'idle', nameKo: '대기', dirs: ['down', 'side', 'up'], frames: [4, 4, 4] },
+  { type: 'walk', nameKo: '걷기', dirs: ['down', 'side', 'up'], frames: [6, 6, 6] },
+  { type: 'slice', nameKo: '공격', dirs: ['down', 'side', 'up'], frames: [4, 4, 4] },
+];
+
+const DIR_NAME_KO = { down: '아래', side: '옆', up: '위' };
+const CUSTOM_SPRITES_KEY = 'murimAdventure_customSprites';
+
 export class ItemEditor {
   constructor(dataManager) {
     this.dm = dataManager;
@@ -204,6 +213,10 @@ export class ItemEditor {
                 </div>
                 <div id="spritePreviewBox" style="margin-top:6px;min-height:40px;display:flex;align-items:center;gap:8px;">
                   ${item.spriteKey ? `<span style="color:var(--text-dim);font-size:11px;">미리보기 로딩 중...</span>` : '<span style="color:var(--text-dim);font-size:10px;">장비 착용 시 캐릭터에 표시될 스프라이트</span>'}
+                </div>
+                <div id="itemEquipAnimStatus" style="margin-top:8px;padding:8px;background:var(--bg-darkest);border-radius:4px;">
+                  <div style="font-size:11px;color:var(--gold);margin-bottom:4px;">장비 애니메이션 상태</div>
+                  <div id="itemAnimStatusList" style="font-size:10px;color:var(--text-dim);"></div>
                 </div>
               </div>
             </div>
@@ -436,6 +449,7 @@ export class ItemEditor {
           input.value = el.dataset.key;
           dropdown.style.display = 'none';
           this._updateSpritePreview(previewBox, el.dataset.key);
+          this._updateEquipAnimStatus(el.dataset.key);
         });
         el.addEventListener('mouseenter', () => { el.style.background = 'var(--bg-hover)'; });
         el.addEventListener('mouseleave', () => { el.style.background = ''; });
@@ -452,6 +466,9 @@ export class ItemEditor {
     // Initial preview
     if (input.value) {
       this._updateSpritePreview(previewBox, input.value);
+      this._updateEquipAnimStatus(input.value);
+    } else {
+      this._updateEquipAnimStatus(null);
     }
   }
 
@@ -550,5 +567,57 @@ export class ItemEditor {
         <div class="preview-stats">${statsHtml}</div>
       </div>
     `;
+  }
+
+  /**
+   * Update the equipment animation status panel for the given spriteKey.
+   */
+  _updateEquipAnimStatus(spriteKey) {
+    const statusList = document.getElementById('itemAnimStatusList');
+    const statusPanel = document.getElementById('itemEquipAnimStatus');
+    if (!statusList || !statusPanel) return;
+
+    if (!spriteKey) {
+      statusPanel.style.display = 'none';
+      return;
+    }
+
+    // Only show for equipment-like sprite keys
+    if (!spriteKey.startsWith('equip_')) {
+      statusPanel.style.display = 'none';
+      return;
+    }
+
+    statusPanel.style.display = 'block';
+
+    let customs = {};
+    try {
+      customs = JSON.parse(localStorage.getItem(CUSTOM_SPRITES_KEY) || '{}');
+    } catch {}
+
+    let html = '';
+    let totalCount = 0;
+    let existCount = 0;
+
+    for (const set of EQUIP_ANIM_SETS) {
+      for (let i = 0; i < set.dirs.length; i++) {
+        const dir = set.dirs[i];
+        const animKey = `${spriteKey}_${set.type}_${dir}`;
+        const exists = !!customs[animKey];
+        totalCount++;
+        if (exists) existCount++;
+
+        html += `<div style="display:flex;justify-content:space-between;padding:2px 0;${exists ? 'color:#88ff88;' : 'color:#666;'}">
+          <span>${set.nameKo} ${DIR_NAME_KO[dir] || dir} (${set.frames[i]}f)</span>
+          <span>${exists ? '있음' : '없음'}</span>
+        </div>`;
+      }
+    }
+
+    const summary = `<div style="margin-bottom:4px;font-size:11px;color:${existCount === totalCount ? '#44ff44' : existCount > 0 ? '#ffaa44' : '#ff4444'};">
+      ${existCount}/${totalCount} 애니메이션 완료
+    </div>`;
+
+    statusList.innerHTML = summary + html;
   }
 }

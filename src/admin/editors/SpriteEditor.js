@@ -106,6 +106,14 @@ const SPRITE_REGISTRY = [
 
 const CATEGORIES = ['캐릭터', '몬스터', 'NPC', '타일', '장비', '이펙트', '아이콘', '기타'];
 
+const EQUIP_ANIM_SETS = [
+  { type: 'idle', nameKo: '대기', dirs: ['down', 'side', 'up'], frames: [4, 4, 4] },
+  { type: 'walk', nameKo: '걷기', dirs: ['down', 'side', 'up'], frames: [6, 6, 6] },
+  { type: 'slice', nameKo: '공격', dirs: ['down', 'side', 'up'], frames: [4, 4, 4] },
+];
+
+const DIR_NAME_KO = { down: '아래', side: '옆', up: '위' };
+
 const TOOLS = [
   { id: 'pencil', label: '연필', icon: '\u270F' },
   { id: 'eraser', label: '지우개', icon: '\u2702' },
@@ -383,6 +391,23 @@ export class SpriteEditor {
     `;
     center.appendChild(actionBar);
 
+    // Equipment animation set panel (only for equipment base sprites)
+    if (this._isEquipmentBaseSprite()) {
+      const equipAnimPanel = document.createElement('div');
+      equipAnimPanel.id = 'equipAnimSetPanel';
+      equipAnimPanel.style.cssText = 'padding:12px;border-top:1px solid var(--border);max-height:220px;overflow-y:auto;';
+      equipAnimPanel.innerHTML = `
+        <h4 style="color:var(--gold);font-size:13px;margin-bottom:8px;">장비 애니메이션 세트</h4>
+        <p style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">
+          캐릭터 애니메이션에 맞는 장비 스프라이트시트를 생성합니다.
+          각 스프라이트시트의 프레임 수는 캐릭터 애니메이션과 동일해야 합니다.
+        </p>
+        <div id="equipAnimList"></div>
+      `;
+      center.appendChild(equipAnimPanel);
+      setTimeout(() => this._renderEquipAnimList(), 0);
+    }
+
     // Bind actions after DOM
     setTimeout(() => this._bindCenterActions(), 0);
 
@@ -559,12 +584,255 @@ export class SpriteEditor {
   // =========================================================================
 
   _isEquipmentSprite() {
-    return this.selectedSprite && this.selectedSprite.category === '장비';
+    return this.selectedSprite && (this.selectedSprite.category === '장비' || this.selectedSprite.category === '커스텀');
+  }
+
+  /**
+   * Check if the selected sprite is a base equipment sprite (not an animation variant).
+   * Base sprites have keys like equip_weapon_sword but NOT equip_weapon_sword_idle_down.
+   */
+  _isEquipmentBaseSprite() {
+    if (!this.selectedSprite || this.selectedSprite.category !== '장비') return false;
+    const key = this.selectedSprite.key;
+    // Base equipment sprites don't end with _{animType}_{dir}
+    for (const set of EQUIP_ANIM_SETS) {
+      for (const dir of set.dirs) {
+        if (key.endsWith(`_${set.type}_${dir}`)) return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Check if the selected sprite is an equipment animation variant sprite.
+   * Returns { baseKey, animType, dir } or null.
+   */
+  _parseEquipAnimKey(key) {
+    if (!key) return null;
+    for (const set of EQUIP_ANIM_SETS) {
+      for (let i = 0; i < set.dirs.length; i++) {
+        const suffix = `_${set.type}_${set.dirs[i]}`;
+        if (key.endsWith(suffix)) {
+          return {
+            baseKey: key.slice(0, -suffix.length),
+            animType: set.type,
+            dir: set.dirs[i],
+            frames: set.frames[i],
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Render the equipment animation set list for the current base equipment sprite.
+   */
+  _renderEquipAnimList() {
+    const listEl = document.getElementById('equipAnimList');
+    if (!listEl || !this.selectedSprite) return;
+
+    const baseKey = this.selectedSprite.key;
+    const customs = this._getCustomSprites();
+
+    let html = `<table style="width:100%;font-size:11px;border-collapse:collapse;">
+      <thead>
+        <tr style="color:var(--gold);border-bottom:1px solid var(--border);">
+          <th style="text-align:left;padding:4px;">애니메이션</th>
+          <th style="text-align:left;padding:4px;">방향</th>
+          <th style="text-align:center;padding:4px;">프레임</th>
+          <th style="text-align:center;padding:4px;">상태</th>
+          <th style="text-align:right;padding:4px;">작업</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+    for (const set of EQUIP_ANIM_SETS) {
+      for (let i = 0; i < set.dirs.length; i++) {
+        const dir = set.dirs[i];
+        const frameCount = set.frames[i];
+        const animKey = `${baseKey}_${set.type}_${dir}`;
+        const exists = !!customs[animKey];
+        // Also check if it exists in the registry
+        const inRegistry = SPRITE_REGISTRY.some(s => s.key === animKey);
+
+        html += `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:4px;color:var(--text);">${set.nameKo} (${set.type})</td>
+          <td style="padding:4px;color:var(--text-dim);">${DIR_NAME_KO[dir] || dir}</td>
+          <td style="padding:4px;text-align:center;color:var(--text-dim);">${frameCount}</td>
+          <td style="padding:4px;text-align:center;">${exists ? '<span style="color:#44ff44;">있음</span>' : '<span style="color:#ff4444;">없음</span>'}</td>
+          <td style="padding:4px;text-align:right;">
+            ${exists || inRegistry
+              ? `<button class="btn btn-secondary btn-small equip-anim-edit-btn" data-key="${animKey}" style="font-size:10px;padding:2px 6px;">편집</button>`
+              : `<button class="btn btn-primary btn-small equip-anim-create-btn" data-key="${animKey}" data-type="${set.type}" data-dir="${dir}" data-frames="${frameCount}" style="font-size:10px;padding:2px 6px;">생성</button>`
+            }
+          </td>
+        </tr>`;
+      }
+    }
+
+    html += '</tbody></table>';
+    listEl.innerHTML = html;
+
+    // Bind create buttons
+    listEl.querySelectorAll('.equip-anim-create-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const animKey = btn.dataset.key;
+        const frameCount = parseInt(btn.dataset.frames);
+        this._createEquipAnimSprite(animKey, frameCount);
+      });
+    });
+
+    // Bind edit buttons
+    listEl.querySelectorAll('.equip-anim-edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const animKey = btn.dataset.key;
+        this._switchToEquipAnimSprite(animKey);
+      });
+    });
+  }
+
+  /**
+   * Create a new blank equipment animation spritesheet.
+   */
+  _createEquipAnimSprite(animKey, frameCount) {
+    const spr = this.selectedSprite;
+    if (!spr) return;
+
+    const frameW = spr.frameWidth;
+    const frameH = spr.frameHeight;
+    const totalW = frameW * frameCount;
+
+    // Create blank canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = totalW;
+    canvas.height = frameH;
+
+    // Save to custom sprites
+    const customs = this._getCustomSprites();
+    customs[animKey] = {
+      dataUrl: canvas.toDataURL('image/png'),
+      width: totalW,
+      height: frameH,
+      frameWidth: frameW,
+      frameHeight: frameH,
+    };
+
+    try {
+      localStorage.setItem(CUSTOM_SPRITES_KEY, JSON.stringify(customs));
+    } catch (e) {
+      if (window.showToast) window.showToast('저장 실패: localStorage 용량 초과', 'error');
+      return;
+    }
+
+    // Add to sprite registry if not already there
+    if (!SPRITE_REGISTRY.find(s => s.key === animKey)) {
+      SPRITE_REGISTRY.push({
+        key: animKey,
+        category: '장비',
+        name: animKey,
+        path: null,
+        frameWidth: frameW,
+        frameHeight: frameH,
+        frames: frameCount,
+        type: 'spritesheet',
+        isCustom: true,
+      });
+    }
+
+    if (window.showToast) window.showToast(`애니메이션 스프라이트 "${animKey}" 생성 완료`, 'success');
+
+    // Refresh the animation list
+    this._renderEquipAnimList();
+    this._renderBrowser();
+  }
+
+  /**
+   * Switch editor to an equipment animation sprite.
+   */
+  _switchToEquipAnimSprite(animKey) {
+    let entry = SPRITE_REGISTRY.find(s => s.key === animKey);
+    if (!entry) {
+      // Try to infer from custom sprites
+      const customs = this._getCustomSprites();
+      if (customs[animKey]) {
+        const data = customs[animKey];
+        entry = {
+          key: animKey,
+          category: '장비',
+          name: animKey,
+          path: null,
+          frameWidth: data.frameWidth || 64,
+          frameHeight: data.frameHeight || 64,
+          frames: data.frameWidth ? Math.max(1, Math.floor(data.width / data.frameWidth)) : 1,
+          type: 'spritesheet',
+          isCustom: true,
+        };
+        SPRITE_REGISTRY.push(entry);
+      }
+    }
+    if (!entry) {
+      if (window.showToast) window.showToast('스프라이트를 찾을 수 없습니다.', 'error');
+      return;
+    }
+
+    this.selectedSprite = entry;
+    this.currentFrame = 0;
+    this._stopAnimation();
+    this.expandedCategories['장비'] = true;
+    this._renderBrowser();
+    this._renderCenter();
+    this._renderTools();
+  }
+
+  /**
+   * Load character guide frame for animation-specific equipment editing.
+   * When editing e.g. equip_weapon_sword_slice_down, loads char_slice_down
+   * and shows the matching frame as guide overlay.
+   */
+  _loadCharGuideForAnim(animType, dir) {
+    this._charGuideImage = null;
+    this._charGuideAnimType = animType;
+    this._charGuideAnimDir = dir;
+
+    const charKey = `char_${animType}_${dir}`;
+    const customs = this._getCustomSprites();
+
+    // Find the character spritesheet entry for frame info
+    const charEntry = SPRITE_REGISTRY.find(s => s.key === charKey);
+
+    const guideSrc = customs[charKey]
+      ? customs[charKey].dataUrl
+      : (charEntry && charEntry.path ? charEntry.path : null);
+
+    if (!guideSrc) {
+      // Fallback to idle_down
+      this._loadCharGuide();
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      this._charGuideImage = img;
+      this._charGuideIsAnimSheet = true;
+      this._charGuideFrameWidth = charEntry ? charEntry.frameWidth : 64;
+      this._charGuideFrameHeight = charEntry ? charEntry.frameHeight : 64;
+      this._charGuideFrames = charEntry ? charEntry.frames : 1;
+      this._redrawDisplay();
+    };
+    img.onerror = () => {
+      // Fallback to idle_down
+      this._loadCharGuide();
+    };
+    img.src = guideSrc;
   }
 
   _loadCharGuide() {
     // Load character idle_down sprite as guide overlay for equipment editing
     this._charGuideImage = null;
+    this._charGuideIsAnimSheet = false;
+    this._charGuideAnimType = null;
+    this._charGuideAnimDir = null;
     const customs = this._getCustomSprites();
     const guideSrc = customs['char_idle_down']
       ? customs['char_idle_down'].dataUrl
@@ -573,6 +841,7 @@ export class SpriteEditor {
     const img = new Image();
     img.onload = () => {
       this._charGuideImage = img;
+      this._charGuideIsAnimSheet = false;
       this._redrawDisplay();
     };
     img.src = guideSrc;
@@ -585,10 +854,18 @@ export class SpriteEditor {
     // Load character guide for equipment sprites
     if (this._isEquipmentSprite()) {
       this.showCharGuide = true;
-      this._loadCharGuide();
+      // Check if this is an equipment animation sprite
+      const animInfo = this._parseEquipAnimKey(spr.key);
+      if (animInfo) {
+        // Load the matching character animation as guide
+        this._loadCharGuideForAnim(animInfo.animType, animInfo.dir);
+      } else {
+        this._loadCharGuide();
+      }
     } else {
       this.showCharGuide = false;
       this._charGuideImage = null;
+      this._charGuideIsAnimSheet = false;
     }
     const customs = this._getCustomSprites();
 
@@ -686,12 +963,33 @@ export class SpriteEditor {
     // Draw character guide overlay for equipment sprites
     if (this._isEquipmentSprite() && this._charGuideImage && this.showCharGuide) {
       this.displayCtx.globalAlpha = 0.3;
-      this.displayCtx.drawImage(
-        this._charGuideImage,
-        0, 0, spr.frameWidth, spr.frameHeight,
-        0, 0, dw, dh
-      );
+
+      if (this._charGuideIsAnimSheet && this._charGuideFrameWidth) {
+        // Animation-specific guide: show the matching frame from the character spritesheet
+        const guideFrameIdx = Math.min(this.currentFrame, this._charGuideFrames - 1);
+        const guideSrcX = guideFrameIdx * this._charGuideFrameWidth;
+        this.displayCtx.drawImage(
+          this._charGuideImage,
+          guideSrcX, 0, this._charGuideFrameWidth, this._charGuideFrameHeight,
+          0, 0, dw, dh
+        );
+      } else {
+        // Static guide: show first frame of idle_down
+        this.displayCtx.drawImage(
+          this._charGuideImage,
+          0, 0, spr.frameWidth, spr.frameHeight,
+          0, 0, dw, dh
+        );
+      }
       this.displayCtx.globalAlpha = 1.0;
+
+      // Show which character animation frame is being used as guide
+      if (this._charGuideIsAnimSheet && this._charGuideAnimType) {
+        const animLabel = `char_${this._charGuideAnimType}_${this._charGuideAnimDir} [${this.currentFrame + 1}/${this._charGuideFrames}]`;
+        this.displayCtx.fillStyle = 'rgba(0, 200, 255, 0.7)';
+        this.displayCtx.font = '10px monospace';
+        this.displayCtx.fillText(animLabel, 2, dh - 4);
+      }
 
       // Draw body region guides (head, torso, legs) as dotted lines
       this.displayCtx.strokeStyle = 'rgba(0, 200, 255, 0.3)';

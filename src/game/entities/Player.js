@@ -207,28 +207,23 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   _syncEquipmentLayerPositions() {
-    if (!this.anims || !this.anims.currentAnim) {
-      // No animation playing - just sync position
-      for (const key of Object.keys(this.equipLayers)) {
-        const sprite = this.equipLayers[key];
-        if (sprite && sprite.active) {
-          sprite.setPosition(this.x, this.y);
-          sprite.setDepth(this.depth + 1);
-          sprite.setFlipX(this.flipX);
-        }
-      }
-      return;
+    // Get current character animation state
+    let animType = 'idle';
+    let animDir = 'down';
+
+    if (this.anims && this.anims.currentAnim) {
+      const parts = this.anims.currentAnim.key.split('_');
+      // player_idle_down → ['player', 'idle', 'down']
+      // player_attack_down → ['player', 'attack', 'down']
+      animType = parts[1] || 'idle';
+      animDir = parts[2] || 'down';
     }
 
-    // Get current character animation state
-    const currentAnimKey = this.anims.currentAnim.key; // e.g. 'player_idle_down'
-    const currentFrame = this.anims.currentFrame ? this.anims.currentFrame.index : 0;
+    // Map 'attack' back to 'slice' for equipment sprites
+    // (character uses 'attack' but sprite files use 'slice')
+    const equipAnimType = animType === 'attack' ? 'slice' : animType;
 
-    // Parse animation type and direction from key
-    // Format: player_{type}_{direction} → type=idle/walk/attack, dir=down/side/up
-    const parts = currentAnimKey.split('_');
-    const animType = parts[1] || 'idle'; // idle, walk, attack, hit, death, run
-    const animDir = parts[2] || 'down';  // down, side, up
+    const currentFrame = (this.anims && this.anims.currentFrame) ? this.anims.currentFrame.index : 0;
 
     for (const key of Object.keys(this.equipLayers)) {
       const sprite = this.equipLayers[key];
@@ -242,17 +237,20 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       if (!baseTexKey) continue;
 
       // Try animated equipment texture: {baseTexKey}_{animType}_{direction}
-      const animEquipKey = `${baseTexKey}_${animType}_${animDir}`;
+      const animEquipKey = `${baseTexKey}_${equipAnimType}_${animDir}`;
+
       if (this.scene.textures.exists(animEquipKey)) {
-        // Animated equipment - sync frame with character
+        // Animated equipment spritesheet - sync frame with character
         const tex = this.scene.textures.get(animEquipKey);
         const frameCount = tex.frameTotal - 1; // exclude __BASE
         if (frameCount > 0) {
           const frameIdx = Math.min(currentFrame, frameCount - 1);
           sprite.setTexture(animEquipKey, frameIdx);
+        } else {
+          sprite.setTexture(animEquipKey);
         }
       } else {
-        // Static equipment - just ensure correct texture and flip
+        // Fallback to static base texture
         if (sprite.texture.key !== baseTexKey) {
           sprite.setTexture(baseTexKey);
         }

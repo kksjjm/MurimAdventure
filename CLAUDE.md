@@ -260,13 +260,16 @@ MurimAdventure/
 - 보상 지급: 경험치, 골드, 아이템
 - `toJSON()` / `fromJSON()` 직렬화 지원
 
-### Equipment Visual System (Player.js, 프레임 동기화)
-- 장비 슬롯별 레이어 스프라이트 오버레이 (9개 레이어: 부적/신발/갑옷/허리띠/장갑/목걸이/투구/방패/무기)
-- **프레임 동기화**: 장비 스프라이트시트가 있으면 캐릭터 애니메이션과 같은 프레임 표시
-  - 네이밍: `{equipTexKey}_{animType}_{direction}` (예: `equip_weapon_sword_walk_down`)
-  - 없으면 정적 오버레이로 폴백
-- 14등급별 틴트 컬러 적용 (창세=빨강, 하품=무색)
-- 아이템 데이터의 `spriteKey` 필드로 커스텀 텍스처 지정 가능
+### Equipment Visual & Animation System (Player.js)
+- 장비 슬롯별 레이어 스프라이트 오버레이 (9개 레이어)
+- **프레임 동기화 애니메이션**: 장비별 9종 애니메이션 스프라이트시트 지원
+  - 네이밍: `{spriteKey}_{animType}_{direction}`
+  - 애니메이션 유형: idle(대기), walk(걷기), slice(공격) × down/side/up = 9개
+  - 캐릭터가 `player_attack_down` 3프레임 재생 → 무기도 `equip_weapon_sword_slice_down` 3프레임 동기 재생
+  - `attack` → `slice` 자동 매핑 (캐릭터 애니메이션 키 ↔ 장비 스프라이트 키)
+  - 애니메이션 스프라이트시트 없으면 정적 오버레이 폴백
+- 14등급별 틴트 컬러 적용
+- 관리자 패널에서 장비 애니메이션 세트 생성/편집/상태 확인 가능
 
 ---
 
@@ -320,7 +323,7 @@ MurimAdventure/
 | StatsConfigEditor | 레벨업 성장률, 전투 공식 계수, 경험치 커브 |
 | GameSettingsEditor | 게임 전역 설정, 기능 토글 |
 | DataManager | JSON 내보내기/가져오기, 백업/복원 |
-| SpriteEditor | 79+종 스프라이트 브라우저, **새 스프라이트 생성** (이름=파일명, PNG 업로드/빈 캔버스), 픽셀아트 에디터, 장비 편집 시 캐릭터 가이드, 커스텀 스프라이트 저장/내보내기/가져오기 |
+| SpriteEditor | 스프라이트 브라우저, 새 스프라이트 생성, 픽셀아트 에디터, **장비 애니메이션 세트 관리** (9종 애니메이션 슬롯별 생성/편집, 프레임별 캐릭터 가이드 오버레이), 커스텀 스프라이트 저장 |
 
 ---
 
