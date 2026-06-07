@@ -11,7 +11,8 @@ import SkillCombinationSystem from '../systems/SkillCombinationSystem.js';
 import ImpactSystem from '../systems/ImpactSystem.js';
 import MapTransitionSystem from '../systems/MapTransitionSystem.js';
 import { getMapData } from '../data/mapData.js';
-import { MONSTERS_BY_ID, ITEMS_BY_ID } from '../../data/defaultData.js';
+import { getGameData } from '../../data/GameDataLoader.js';
+import { spawnItemPickup, onItemPickup } from '../systems/ItemPickupSystem.js';
 
 const TILE_SIZE = 32;
 const PORTAL_RANGE = 40;
@@ -268,7 +269,7 @@ export default class DarkForestScene extends Phaser.Scene {
     for (let i = 0; i < config.count; i++) {
       const typeIdx = this._weightedRandom(config.weights);
       const monsterId = config.types[Math.min(typeIdx, config.types.length - 1)];
-      const monsterData = MONSTERS_BY_ID[monsterId];
+      const monsterData = getGameData().monsters[monsterId];
       if (!monsterData) continue;
 
       let sx, sy, tile;
@@ -302,7 +303,7 @@ export default class DarkForestScene extends Phaser.Scene {
       for (let i = 0; i < toSpawn; i++) {
         const typeIdx = this._weightedRandom(config.weights);
         const monsterId = config.types[Math.min(typeIdx, config.types.length - 1)];
-        const monsterData = MONSTERS_BY_ID[monsterId];
+        const monsterData = getGameData().monsters[monsterId];
         if (!monsterData) continue;
 
         let sx, sy, tile;
@@ -339,47 +340,11 @@ export default class DarkForestScene extends Phaser.Scene {
   // ==========================================================================
 
   spawnItemPickup(itemId, x, y) {
-    const pickup = this.physics.add.sprite(x, y, 'item_pickup');
-    pickup.setDepth(8);
-    pickup.setData('itemId', itemId);
-
-    this.tweens.add({
-      targets: pickup,
-      y: y - 5,
-      duration: 600,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
-
-    this.itemPickups.add(pickup);
-    return pickup;
+    return spawnItemPickup(this, this.itemPickups, itemId, x, y);
   }
 
   _onItemPickup(player, pickup) {
-    const itemId = pickup.getData('itemId');
-    if (itemId) {
-      player.addItem(itemId, 1);
-
-      const itemData = ITEMS_BY_ID[itemId];
-      const name = itemData ? (itemData.nameKo || itemData.name) : itemId;
-      const text = this.add.text(pickup.x, pickup.y - 10, `획득: ${name}`, {
-        fontSize: '11px',
-        fontFamily: 'monospace',
-        color: '#66ff66',
-        stroke: '#000000',
-        strokeThickness: 2,
-      });
-      text.setOrigin(0.5, 1).setDepth(1000);
-      this.tweens.add({
-        targets: text,
-        y: pickup.y - 40,
-        alpha: 0,
-        duration: 1000,
-        onComplete: () => text.destroy(),
-      });
-    }
-    pickup.destroy();
+    onItemPickup(this, player, pickup);
   }
 
   // ==========================================================================

@@ -1,0 +1,43 @@
+[
+  {
+    "id": "combo_slash_bolt",
+    "module_id": "skill_system",
+    "name": "Charged Slash",
+    "nameKo": "충전 베기",
+    "description": "근접 판정과 원거리 속성을 합성하는 레시피 예시입니다.",
+    "ingredients": [
+      "skill_slash",
+      "skill_bolt"
+    ],
+    "requiredProficiency": {
+      "skill_slash": 100,
+      "skill_bolt": 100
+    },
+    "proficiencyReq": {
+      "skill_slash": 100,
+      "skill_bolt": 100
+    },
+    "result": {
+      "id": "skill_charged_slash",
+      "name": "Charged Slash",
+      "nameKo": "충전 베기",
+      "category": "melee",
+      "element": "LIGHTNING",
+      "damageType": "PHYSICAL",
+      "mpCost": 12,
+      "cooldown": 3500,
+      "baseDamage": 35,
+      "range": 72,
+      "effects": [
+        {
+          "type": "DAMAGE",
+          "scaling": {
+            "ATK": 1,
+            "INT": 0.4
+          }
+        }
+      ],
+      "proficiencyGain": 5
+    }
+  }
+]

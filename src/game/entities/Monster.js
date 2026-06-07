@@ -3,39 +3,47 @@
 // =============================================================================
 
 import Phaser from 'phaser';
-import { ITEMS_BY_ID } from '../../data/defaultData.js';
+import { getGameData } from '../../data/GameDataLoader.js';
 
 export default class Monster extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y, monsterData) {
-    // Map monster IDs to new mob sprite base keys
-    const spriteMap = {
-      mon_wild_boar: 'orc',
-      mon_mountain_bandit: 'orc_warrior',
-      mon_poison_snake: 'skeleton_base',
-      mon_dark_swordsman: 'skeleton_warrior',
-      mon_mountain_spirit: 'orc_shaman',
-      mon_blood_demon_king: 'skeleton_mage',
+    // Default sprite map (ID → built-in mob base key)
+    const defaultSpriteMap = {
+      monster_training_box: 'monster_box',
+      monster_aggressive_box: 'monster_box_aggressive',
     };
 
     // Legacy fallback map (programmatic textures)
     const legacySpriteMap = {
-      mon_wild_boar: 'monster_boar',
-      mon_mountain_bandit: 'monster_bandit',
-      mon_poison_snake: 'monster_snake',
-      mon_dark_swordsman: 'monster_bandit',
-      mon_mountain_spirit: 'monster_wolf',
-      mon_blood_demon_king: 'monster_bandit',
+      monster_training_box: 'monster_box',
+      monster_aggressive_box: 'monster_box_aggressive',
     };
 
-    const mobBaseKey = spriteMap[monsterData.spriteKey] || spriteMap[monsterData.id] || 'orc';
+    // Determine mob base key: admin spriteKey → default map → fallback 'orc'
+    const adminSpriteKey = monsterData.spriteKey;
+    let mobBaseKey;
+
+    // If admin set a spriteKey and it exists as an idle spritesheet, use it directly
+    if (adminSpriteKey && scene.textures.exists(`${adminSpriteKey}_idle`)) {
+      mobBaseKey = adminSpriteKey;
+    } else if (adminSpriteKey && scene.textures.exists(adminSpriteKey)) {
+      // Custom sprite without _idle suffix (static or custom naming)
+      mobBaseKey = adminSpriteKey;
+    } else {
+      // Fall back to default mapping
+      mobBaseKey = defaultSpriteMap[adminSpriteKey] || defaultSpriteMap[monsterData.id] || 'monster_box';
+    }
+
     const idleTextureKey = `${mobBaseKey}_idle`;
 
     // Use new spritesheet if available, otherwise fall back to legacy programmatic texture
     let spriteKey;
     if (scene.textures.exists(idleTextureKey)) {
       spriteKey = idleTextureKey;
+    } else if (scene.textures.exists(mobBaseKey)) {
+      spriteKey = mobBaseKey;
     } else {
-      spriteKey = legacySpriteMap[monsterData.spriteKey] || legacySpriteMap[monsterData.id] || 'monster_boar';
+      spriteKey = legacySpriteMap[monsterData.spriteKey] || legacySpriteMap[monsterData.id] || 'monster_box';
     }
 
     super(scene, x, y, spriteKey);

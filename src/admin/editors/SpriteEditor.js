@@ -2,6 +2,8 @@
 // SpriteEditor - 스프라이트 관리 (Pixel Art Editor)
 // =============================================================================
 
+import { getItemIconKey } from '../../data/GameDataLoader.js';
+
 const CUSTOM_SPRITES_KEY = 'murimAdventure_customSprites';
 
 const SPRITE_REGISTRY = [
@@ -104,7 +106,7 @@ const SPRITE_REGISTRY = [
   { key: 'item_pickup', category: '기타', name: '아이템 드롭', path: null, frameWidth: 16, frameHeight: 16, frames: 1, type: 'static' },
 ];
 
-const CATEGORIES = ['캐릭터', '몬스터', 'NPC', '타일', '장비', '이펙트', '아이콘', '기타'];
+const CATEGORIES = ['장비', '캐릭터', '몬스터', 'NPC', '타일', '이펙트', '아이콘', '기타', '커스텀'];
 
 const EQUIP_ANIM_SETS = [
   { type: 'idle', nameKo: '대기', dirs: ['down', 'side', 'up'], frames: [4, 4, 4] },
@@ -113,6 +115,41 @@ const EQUIP_ANIM_SETS = [
 ];
 
 const DIR_NAME_KO = { down: '아래', side: '옆', up: '위' };
+
+const BROWSER_CATEGORIES = ['메인 캐릭터', '아이템 장비', '몬스터', 'NPC', '스킬/이펙트', '소모품', '탈것/환수', '커스텀'];
+
+const SKILL_EFFECT_SPRITE_MAP = {
+  effect_slash_damage: 'fx_slash',
+  effect_bolt_damage: 'fx_lightning',
+  effect_recover_channel: 'fx_heal',
+};
+
+const EQUIPMENT_SLOT_LABELS = {
+  WEAPON: '무기',
+  SHIELD: '방패',
+  HELMET: '투구',
+  ARMOR: '갑옷',
+  PANTS: '하의',
+  SHOES: '신발',
+  GLOVES: '장갑',
+  BELT: '허리띠',
+  RING_RIGHT: '반지',
+  RING_LEFT: '반지',
+  NECKLACE: '목걸이',
+  TALISMAN: '부적',
+  JADE_TOKEN: '옥패',
+};
+
+const WEAPON_TYPE_LABELS = {
+  SWORD: '검',
+  BLADE: '도',
+  SPEAR: '창',
+  STAFF: '봉',
+  HIDDEN: '암기',
+  WHIP: '편',
+  FIST: '권',
+  EXOTIC: '기문병기',
+};
 
 const TOOLS = [
   { id: 'pencil', label: '연필', icon: '\u270F' },
@@ -136,13 +173,20 @@ export class SpriteEditor {
   constructor(dataManager) {
     this.dm = dataManager;
     this.selectedSprite = null;
-    this.expandedCategories = { '캐릭터': true };
+    this.expandedCategories = {
+      '아이템 장비': true,
+      '스킬/이펙트': true,
+      '스킬/이펙트>스킬 아이콘': true,
+      '스킬/이펙트>스킬 이펙트': true,
+      '스킬/이펙트>시전 애니메이션': true,
+    };
     this.currentTool = 'pencil';
     this.currentColor = '#000000';
     this.brushSize = 1;
     this.zoom = 8;
     this.showGrid = true;
     this.showCharGuide = false;
+    this.showInvGuide = false;
     this._charGuideImage = null;
     this.currentFrame = 0;
     this.isPlaying = false;
@@ -225,50 +269,473 @@ export class SpriteEditor {
   // Browser Panel
   // =========================================================================
 
+  _escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[ch]));
+  }
+
+  _ensureRegistryEntry(entry) {
+    const existing = SPRITE_REGISTRY.find(s => s.key === entry.key);
+    if (existing) {
+      Object.assign(existing, entry);
+      return existing;
+    }
+    SPRITE_REGISTRY.push(entry);
+    return entry;
+  }
+
+  _getGeneratedEquipmentKey(item) {
+    const rawId = item?.id || 'unknown_item';
+    return `equip_${rawId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+  }
+
+  _getEquipmentBaseKey(item) {
+    if (!item) return null;
+    if (item.spriteKey) return item.spriteKey;
+    return this._getGeneratedEquipmentKey(item);
+  }
+
+  _getGeneratedSkillIconKey(skill) {
+    const rawId = skill?.id || 'unknown_skill';
+    return `skill_icon_${rawId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+  }
+
+  _getGeneratedSkillEffectKey(skill) {
+    const rawId = skill?.id || 'unknown_skill';
+    return `skill_fx_${rawId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+  }
+
+  _getSkillEffectSpriteKey(skill) {
+    if (skill?.effectKey) return skill.effectKey;
+    if (skill?.effectSpriteKey) return skill.effectSpriteKey;
+    if (skill?.base_effect_id && SKILL_EFFECT_SPRITE_MAP[skill.base_effect_id]) {
+      return SKILL_EFFECT_SPRITE_MAP[skill.base_effect_id];
+    }
+    return this._getGeneratedSkillEffectKey(skill);
+  }
+
+  _getEquipmentGroupLabel(item) {
+    if (item?.slot === 'WEAPON') {
+      const weaponType = WEAPON_TYPE_LABELS[item.weaponType] || '무기';
+      return `무기 / ${weaponType}`;
+    }
+    return EQUIPMENT_SLOT_LABELS[item?.slot] || item?.slot || '기타 장비';
+  }
+
+  _getSpriteInfo(key, fallback = {}) {
+    const base = SPRITE_REGISTRY.find(s => s.key === key);
+    return this._ensureRegistryEntry({
+      key,
+      category: fallback.category || base?.category || '기타',
+      name: fallback.name || base?.name || key,
+      path: fallback.path ?? base?.path ?? null,
+      frameWidth: fallback.frameWidth || base?.frameWidth || 64,
+      frameHeight: fallback.frameHeight || base?.frameHeight || 64,
+      frames: fallback.frames || base?.frames || 1,
+      type: fallback.type || base?.type || 'static',
+      ...fallback,
+    });
+  }
+
+  _getEquipmentSpriteEntries(item) {
+    const baseKey = this._getEquipmentBaseKey(item);
+    if (!baseKey) return [];
+
+    const itemName = item.name || item.nameKo || item.id;
+    const browserItem = item.slot === 'WEAPON'
+      ? `${itemName} (${WEAPON_TYPE_LABELS[item.weaponType] || item.weaponType || '무기'})`
+      : itemName;
+    const entries = [this._getSpriteInfo(baseKey, {
+      category: '장비',
+      browserCategory: '아이템 장비',
+      browserGroup: this._getEquipmentGroupLabel(item),
+      browserItem,
+      name: `${itemName} / 기본`,
+      itemId: item.id,
+      dataId: item.id,
+      baseSpriteKey: baseKey,
+      frameWidth: 64,
+      frameHeight: 64,
+      frames: 1,
+      type: 'static',
+    })];
+
+    for (const set of EQUIP_ANIM_SETS) {
+      set.dirs.forEach((dir, index) => {
+        const key = `${baseKey}_${set.type}_${dir}`;
+        entries.push(this._getSpriteInfo(key, {
+          category: '장비',
+          browserCategory: '아이템 장비',
+          browserGroup: this._getEquipmentGroupLabel(item),
+          browserItem,
+          name: `${set.nameKo} (${DIR_NAME_KO[dir]})`,
+          itemId: item.id,
+          dataId: item.id,
+          baseSpriteKey: baseKey,
+          frameWidth: 64,
+          frameHeight: 64,
+          frames: set.frames[index],
+          type: 'spritesheet',
+        }));
+      });
+    }
+
+    return entries;
+  }
+
+  _getDataSpriteEntries(customSprites) {
+    const data = this.dm?.data || {};
+    const entries = [];
+
+    // --- Main Character ---
+    const mainCharacter = data.mainCharacter || {};
+    const characterName = mainCharacter.nameKo || mainCharacter.name || 'Main Character';
+    const playerBaseKey = mainCharacter.spriteKey || 'player_base';
+    entries.push(this._getSpriteInfo(playerBaseKey, {
+      category: '캐릭터',
+      browserCategory: '메인 캐릭터',
+      browserGroup: '기본',
+      browserItem: characterName,
+      name: `${characterName} / 기본 박스`,
+      dataId: 'mainCharacter',
+      characterSpriteRole: 'base',
+      frameWidth: 64,
+      frameHeight: 64,
+      frames: 1,
+      type: 'static',
+    }));
+
+    for (const action of ['idle', 'walk', 'run', 'attack', 'hit', 'death']) {
+      for (const dir of ['down', 'side', 'up']) {
+        const key = `player_${action}_${dir}`;
+        entries.push(this._getSpriteInfo(key, {
+          category: '캐릭터',
+          browserCategory: '메인 캐릭터',
+          browserGroup: action,
+          browserItem: characterName,
+          name: `${characterName} / ${action} ${dir}`,
+          dataId: 'mainCharacter',
+          characterSpriteRole: 'animation',
+          baseSpriteKey: playerBaseKey,
+          frameWidth: 64,
+          frameHeight: 64,
+          frames: action === 'idle' || action === 'attack' || action === 'death' ? 4 : action === 'hit' ? 2 : 6,
+          type: 'spritesheet',
+        }));
+      }
+    }
+
+    // --- Equipment Items ---
+    const items = Object.values(data.items || {});
+    const equipmentItems = items.filter(item => item?.slot);
+    for (const item of equipmentItems) {
+      entries.push(...this._getEquipmentSpriteEntries(item));
+    }
+
+    // --- Consumable / Non-equipment Items ---
+    const nonEquipItems = items.filter(item => item && !item.slot);
+    for (const item of nonEquipItems) {
+      const sprKey = getItemIconKey(item);
+      entries.push(this._getSpriteInfo(sprKey, {
+        category: '아이콘',
+        browserCategory: '소모품',
+        browserGroup: item.type || '기타',
+        browserItem: item.nameKo || item.name || item.id,
+        name: item.nameKo || item.name || item.id,
+        dataId: item.id,
+        itemId: item.id,
+        spriteRole: 'itemIcon',
+        frameWidth: 32,
+        frameHeight: 32,
+        frames: 1,
+        type: 'static',
+      }));
+      entries.push(this._getSpriteInfo(sprKey, {
+        category: '아이콘',
+        browserCategory: '소모품',
+        browserGroup: item.type || '기타',
+        browserItem: item.nameKo || item.name || item.id,
+        name: item.nameKo || item.name || item.id,
+        dataId: item.id,
+        itemId: item.id,
+        spriteRole: 'itemIcon',
+        frameWidth: 32, frameHeight: 32, frames: 1, type: 'static',
+      }));
+    }
+
+    // --- Monsters ---
+    const monsters = Object.values(data.monsters || {});
+    for (const mon of monsters) {
+      const monName = mon.nameKo || mon.name || mon.id;
+      const sprKey = mon.spriteKey || `mon_${mon.id}`;
+      // Base idle sprite
+      entries.push(this._getSpriteInfo(sprKey, {
+        category: '몬스터',
+        browserCategory: '몬스터',
+        browserGroup: `Lv.${mon.level || '?'}`,
+        browserItem: monName,
+        name: `${monName} (기본)`,
+        dataId: mon.id,
+        frameWidth: 32, frameHeight: 32, frames: 4, type: 'spritesheet',
+      }));
+      // Animation variants (idle/run/death)
+      for (const anim of ['idle', 'run', 'death']) {
+        const animKey = `${sprKey}_${anim}`;
+        entries.push(this._getSpriteInfo(animKey, {
+          category: '몬스터',
+          browserCategory: '몬스터',
+          browserGroup: `Lv.${mon.level || '?'}`,
+          browserItem: monName,
+          name: `${monName} / ${anim}`,
+          dataId: mon.id,
+          baseSpriteKey: sprKey,
+          frameWidth: 32, frameHeight: 32, frames: 4, type: 'spritesheet',
+        }));
+      }
+    }
+
+    // --- Skills ---
+    const skills = Object.values(data.skills || {});
+    for (const skill of skills) {
+      const skillName = skill.nameKo || skill.name || skill.id;
+      const generatedIconKey = this._getGeneratedSkillIconKey(skill);
+      const generatedEffectKey = this._getGeneratedSkillEffectKey(skill);
+      const resolvedIconKey = skill.iconKey || generatedIconKey;
+      const resolvedEffectKey = this._getSkillEffectSpriteKey(skill);
+
+      entries.push(this._getSpriteInfo(resolvedIconKey, {
+        category: '아이콘',
+        browserCategory: '스킬/이펙트',
+        browserGroup: '스킬 아이콘',
+        browserItem: skillName,
+        name: `${skillName} (아이콘)`,
+        dataId: skill.id,
+        skillId: skill.id,
+        spriteRole: 'skillIcon',
+        frameWidth: 32,
+        frameHeight: 32,
+        frames: 1,
+        type: 'static',
+      }));
+
+      entries.push(this._getSpriteInfo(resolvedEffectKey, {
+        category: '이펙트',
+        browserCategory: '스킬/이펙트',
+        browserGroup: '스킬 이펙트',
+        browserItem: skillName,
+        name: `${skillName} (이펙트)`,
+        dataId: skill.id,
+        skillId: skill.id,
+        spriteRole: 'skillEffect',
+        frameWidth: 96,
+        frameHeight: 96,
+        frames: 1,
+        type: 'static',
+      }));
+
+      if (!skill.iconKey) {
+        entries.push(this._getSpriteInfo(generatedIconKey, {
+          category: 'Icon',
+          browserCategory: 'Skill / Effect',
+          browserGroup: 'Skill Icon',
+          browserItem: skillName,
+          name: `${skillName} (Icon)`,
+          dataId: skill.id,
+          skillId: skill.id,
+          spriteRole: 'skillIcon',
+          frameWidth: 32,
+          frameHeight: 32,
+          frames: 1,
+          type: 'static',
+        }));
+      }
+
+      if (!skill.effectKey && !skill.effectSpriteKey && resolvedEffectKey === generatedEffectKey) {
+        entries.push(this._getSpriteInfo(generatedEffectKey, {
+          category: 'Effect',
+          browserCategory: 'Skill / Effect',
+          browserGroup: 'Skill Effect',
+          browserItem: skillName,
+          name: `${skillName} (Effect)`,
+          dataId: skill.id,
+          skillId: skill.id,
+          spriteRole: 'skillEffect',
+          frameWidth: 96,
+          frameHeight: 96,
+          frames: 1,
+          type: 'static',
+        }));
+      }
+
+      entries.push(this._getSpriteInfo(skill.castSpriteKey || `${resolvedEffectKey}_cast`, {
+        category: '이펙트',
+        browserCategory: '스킬/이펙트',
+        browserGroup: '시전 애니메이션',
+        browserItem: skillName,
+        name: `${skillName} (시전)`,
+        dataId: skill.id,
+        skillId: skill.id,
+        spriteRole: 'skillCast',
+        frameWidth: 96,
+        frameHeight: 96,
+        frames: 4,
+        type: 'spritesheet',
+      }));
+      if (skill.iconKey) {
+        entries.push(this._getSpriteInfo(skill.iconKey, {
+          category: '아이콘',
+          browserCategory: '스킬/이펙트',
+          browserGroup: '스킬 아이콘',
+          browserItem: skillName,
+          name: `${skillName} (아이콘)`,
+          dataId: skill.id,
+          frameWidth: 32, frameHeight: 32, frames: 1, type: 'static',
+        }));
+      }
+      if (skill.effectKey) {
+        entries.push(this._getSpriteInfo(skill.effectKey, {
+          category: '이펙트',
+          browserCategory: '스킬/이펙트',
+          browserGroup: '스킬 이펙트',
+          browserItem: skillName,
+          name: `${skillName} (이펙트)`,
+          dataId: skill.id,
+          frameWidth: 96, frameHeight: 96, frames: 1, type: 'static',
+        }));
+      }
+    }
+
+    // --- Mounts ---
+    const mounts = data.mounts || [];
+    for (const mount of mounts) {
+      const mountName = mount.nameKo || mount.name || mount.id;
+      const sprKey = mount.spriteKey || `mount_${mount.id}`;
+      entries.push(this._getSpriteInfo(sprKey, {
+        category: '기타',
+        browserCategory: '탈것/환수',
+        browserGroup: '탈것',
+        browserItem: mountName,
+        name: mountName,
+        dataId: mount.id,
+        frameWidth: 64, frameHeight: 64, frames: 1, type: 'static',
+      }));
+    }
+
+    // --- Pets ---
+    const pets = data.pets || [];
+    for (const pet of pets) {
+      const petName = pet.nameKo || pet.name || pet.id;
+      const sprKey = pet.spriteKey || `pet_${pet.id}`;
+      entries.push(this._getSpriteInfo(sprKey, {
+        category: '기타',
+        browserCategory: '탈것/환수',
+        browserGroup: '환수',
+        browserItem: petName,
+        name: petName,
+        dataId: pet.id,
+        frameWidth: 32, frameHeight: 32, frames: 4, type: 'spritesheet',
+      }));
+    }
+
+    // --- Custom Sprites (not already listed above) ---
+    const knownKeys = new Set(entries.map(e => e.key));
+    for (const key of Object.keys(customSprites)) {
+      if (knownKeys.has(key)) continue;
+
+      const cData = customSprites[key];
+      const cat = cData.category || '커스텀';
+      entries.push(this._getSpriteInfo(key, {
+        category: cat,
+        browserCategory: '커스텀',
+        browserGroup: cat,
+        browserItem: key,
+        name: key,
+        path: null,
+        frameWidth: cData.frameWidth || cData.width || 64,
+        frameHeight: cData.frameHeight || cData.height || 64,
+        frames: cData.frameWidth ? Math.max(1, Math.floor(cData.width / cData.frameWidth)) : 1,
+        type: (cData.frameWidth && cData.width > cData.frameWidth) ? 'spritesheet' : 'static',
+        isCustom: true,
+      }));
+    }
+
+    return entries;
+  }
+
+  _dedupeSprites(entries) {
+    const seen = new Set();
+    return entries.filter(entry => {
+      const scope = `${entry.browserCategory}|${entry.browserGroup}|${entry.browserItem}|${entry.key}`;
+      if (seen.has(scope)) return false;
+      seen.add(scope);
+      return true;
+    });
+  }
+
+  _renderGroupHeader(id, label, count, depth) {
+    const expanded = this.expandedCategories[id];
+    const safeId = this._escapeHtml(id);
+    return `<div class="spr-cat" data-cat="${safeId}" style="cursor:pointer;margin-left:${depth * 10}px;padding:5px 7px;font-size:${depth ? 12 : 13}px;color:var(--text);display:flex;align-items:center;gap:6px;border-radius:4px;${expanded ? 'background:var(--bg-hover);' : ''}">
+      <span style="font-size:10px;transition:transform 0.2s;display:inline-block;${expanded ? 'transform:rotate(90deg);' : ''}">\u25B6</span>
+      <span title="${safeId}">${this._escapeHtml(label)}</span>
+      <span style="font-size:11px;color:var(--text-dim);margin-left:auto;">${count}</span>
+    </div>`;
+  }
+
+  _renderSpriteRow(spr, customSprites, depth) {
+    const isSelected = this.selectedSprite && this.selectedSprite.key === spr.key;
+    const hasCustom = !!customSprites[spr.key];
+    const key = this._escapeHtml(spr.key);
+    const path = spr.path ? `<div style="font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${this._escapeHtml(spr.path)}</div>` : '';
+    const dataId = spr.dataId ? `<span style="font-size:10px;color:var(--text-dim);">data: ${this._escapeHtml(spr.dataId)}</span>` : '';
+    return `<div class="spr-item" data-key="${key}" style="cursor:pointer;margin-left:${depth * 10}px;padding:5px 8px;font-size:12px;border-radius:3px;border-left:2px solid ${isSelected ? 'var(--gold)' : 'transparent'};${isSelected ? 'background:var(--bg-panel);color:var(--gold);' : 'color:var(--text-dim);'}">
+      <div style="display:flex;align-items:center;gap:4px;min-width:0;">
+        ${hasCustom ? '<span style="color:var(--accent-green);font-size:8px;">\u25CF</span>' : ''}
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${key}">${this._escapeHtml(spr.name || spr.key)}</span>
+      </div>
+      <div style="font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${key} ${dataId}</div>
+      ${path}
+    </div>`;
+  }
+
   _renderBrowser() {
     const browser = document.getElementById('sprBrowser');
     if (!browser) return;
     const customSprites = this._getCustomSprites();
 
-    // Add custom sprites not in registry
-    for (const key of Object.keys(customSprites)) {
-      if (!SPRITE_REGISTRY.find(s => s.key === key)) {
-        const data = customSprites[key];
-        SPRITE_REGISTRY.push({
-          key,
-          category: '커스텀',
-          name: key,
-          path: null,
-          frameWidth: data.frameWidth || data.width || 64,
-          frameHeight: data.frameHeight || data.height || 64,
-          frames: data.frameWidth ? Math.max(1, Math.floor(data.width / data.frameWidth)) : 1,
-          type: (data.frameWidth && data.width > data.frameWidth) ? 'spritesheet' : 'static',
-          isCustom: true,
-        });
-      }
-    }
-    // Ensure 커스텀 category is listed
-    if (!CATEGORIES.includes('커스텀') && SPRITE_REGISTRY.some(s => s.category === '커스텀')) {
-      CATEGORIES.push('커스텀');
-    }
+    const entries = this._dedupeSprites(this._getDataSpriteEntries(customSprites));
+    let html = '<div style="font-size:12px;color:var(--gold);font-weight:700;margin-bottom:8px;padding:4px;">스프라이트 카테고리</div>';
 
-    let html = '<div style="font-size:12px;color:var(--gold);font-weight:700;margin-bottom:8px;padding:4px;">카테고리</div>';
+    for (const cat of BROWSER_CATEGORIES) {
+      const catEntries = entries.filter(entry => entry.browserCategory === cat);
+      if (!catEntries.length) continue;
 
-    for (const cat of CATEGORIES) {
-      const expanded = this.expandedCategories[cat];
-      const sprites = SPRITE_REGISTRY.filter(s => s.category === cat);
-      html += `<div class="spr-cat" data-cat="${cat}" style="cursor:pointer;padding:6px 8px;font-size:13px;color:var(--text);display:flex;align-items:center;gap:6px;border-radius:4px;${expanded ? 'background:var(--bg-hover);' : ''}"
-        ><span style="font-size:10px;transition:transform 0.2s;display:inline-block;${expanded ? 'transform:rotate(90deg);' : ''}">\u25B6</span> ${cat} <span style="font-size:11px;color:var(--text-dim);margin-left:auto;">${sprites.length}</span></div>`;
-      if (expanded) {
-        html += '<div style="padding-left:12px;">';
-        for (const spr of sprites) {
-          const isSelected = this.selectedSprite && this.selectedSprite.key === spr.key;
-          const hasCustom = !!customSprites[spr.key];
-          html += `<div class="spr-item" data-key="${spr.key}" style="cursor:pointer;padding:4px 8px;font-size:12px;border-radius:3px;display:flex;align-items:center;gap:4px;
-            ${isSelected ? 'background:var(--bg-panel);color:var(--gold);border-left:2px solid var(--gold);' : 'color:var(--text-dim);border-left:2px solid transparent;'}
-            ">${hasCustom ? '<span style="color:var(--accent-green);font-size:8px;">\u25CF</span>' : ''}${spr.name}</div>`;
+      html += this._renderGroupHeader(cat, cat, catEntries.length, 0);
+      if (this.expandedCategories[cat]) {
+        const groups = [...new Set(catEntries.map(entry => entry.browserGroup || cat))];
+        for (const group of groups) {
+          const groupId = `${cat}>${group}`;
+          const groupEntries = catEntries.filter(entry => (entry.browserGroup || cat) === group);
+          html += this._renderGroupHeader(groupId, group, groupEntries.length, 1);
+          if (this.expandedCategories[groupId]) {
+            const items = [...new Set(groupEntries.map(entry => entry.browserItem || entry.name || entry.key))];
+            for (const item of items) {
+              const itemId = `${groupId}>${item}`;
+              const itemEntries = groupEntries.filter(entry => (entry.browserItem || entry.name || entry.key) === item);
+              html += this._renderGroupHeader(itemId, item, itemEntries.length, 2);
+              if (this.expandedCategories[itemId] || cat === '스킬/이펙트') {
+                for (const spr of itemEntries) {
+                  html += this._renderSpriteRow(spr, customSprites, 3);
+                }
+              }
+            }
+          }
         }
-        html += '</div>';
       }
     }
     browser.innerHTML = html;
@@ -501,6 +968,15 @@ export class SpriteEditor {
       </label>
     </div>`;
 
+    // Inventory box guide toggle
+    html += `<div style="margin-bottom:8px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ffaa44;">
+        <input type="checkbox" id="sprInvGuide" ${this.showInvGuide ? 'checked' : ''}>
+        인벤토리 박스 가이드
+      </label>
+      <small style="color:var(--text-dim);font-size:10px;margin-left:26px;">42×42 셀 내 표시 영역 (36×36)</small>
+    </div>`;
+
     // Character guide toggle (only for equipment sprites)
     if (this._isEquipmentSprite()) {
       html += `<div style="margin-bottom:8px;">
@@ -571,6 +1047,10 @@ export class SpriteEditor {
       this.showGrid = e.target.checked;
       this._redrawDisplay();
     });
+    document.getElementById('sprInvGuide')?.addEventListener('change', (e) => {
+      this.showInvGuide = e.target.checked;
+      this._redrawDisplay();
+    });
     document.getElementById('sprCharGuide')?.addEventListener('change', (e) => {
       this.showCharGuide = e.target.checked;
       this._redrawDisplay();
@@ -584,7 +1064,11 @@ export class SpriteEditor {
   // =========================================================================
 
   _isEquipmentSprite() {
-    return this.selectedSprite && (this.selectedSprite.category === '장비' || this.selectedSprite.category === '커스텀');
+    return this.selectedSprite && (
+      this.selectedSprite.category === '장비'
+      || this.selectedSprite.browserCategory === '장비'
+      || this.selectedSprite.category === '커스텀'
+    );
   }
 
   /**
@@ -592,7 +1076,7 @@ export class SpriteEditor {
    * Base sprites have keys like equip_weapon_sword but NOT equip_weapon_sword_idle_down.
    */
   _isEquipmentBaseSprite() {
-    if (!this.selectedSprite || this.selectedSprite.category !== '장비') return false;
+    if (!this.selectedSprite || (this.selectedSprite.category !== '장비' && this.selectedSprite.browserCategory !== '장비')) return false;
     const key = this.selectedSprite.key;
     // Base equipment sprites don't end with _{animType}_{dir}
     for (const set of EQUIP_ANIM_SETS) {
@@ -779,7 +1263,7 @@ export class SpriteEditor {
     this.selectedSprite = entry;
     this.currentFrame = 0;
     this._stopAnimation();
-    this.expandedCategories['장비'] = true;
+    this.expandedCategories['아이템 장비'] = true;
     this._renderBrowser();
     this._renderCenter();
     this._renderTools();
@@ -791,60 +1275,64 @@ export class SpriteEditor {
    * and shows the matching frame as guide overlay.
    */
   _loadCharGuideForAnim(animType, dir) {
-    this._charGuideImage = null;
     this._charGuideAnimType = animType;
     this._charGuideAnimDir = dir;
-
-    const charKey = `char_${animType}_${dir}`;
-    const customs = this._getCustomSprites();
-
-    // Find the character spritesheet entry for frame info
-    const charEntry = SPRITE_REGISTRY.find(s => s.key === charKey);
-
-    const guideSrc = customs[charKey]
-      ? customs[charKey].dataUrl
-      : (charEntry && charEntry.path ? charEntry.path : null);
-
-    if (!guideSrc) {
-      // Fallback to idle_down
-      this._loadCharGuide();
-      return;
-    }
-
-    const img = new Image();
-    img.onload = () => {
-      this._charGuideImage = img;
-      this._charGuideIsAnimSheet = true;
-      this._charGuideFrameWidth = charEntry ? charEntry.frameWidth : 64;
-      this._charGuideFrameHeight = charEntry ? charEntry.frameHeight : 64;
-      this._charGuideFrames = charEntry ? charEntry.frames : 1;
-      this._redrawDisplay();
-    };
-    img.onerror = () => {
-      // Fallback to idle_down
-      this._loadCharGuide();
-    };
-    img.src = guideSrc;
+    this._charGuideImage = this._createBoxCharacterGuideCanvas(64, 64, dir);
+    this._charGuideIsAnimSheet = false;
+    this._charGuideFrameWidth = 64;
+    this._charGuideFrameHeight = 64;
+    this._charGuideFrames = 1;
+    this._redrawDisplay();
   }
 
   _loadCharGuide() {
-    // Load character idle_down sprite as guide overlay for equipment editing
-    this._charGuideImage = null;
+    // Current game character is a generated 64x64 box sprite, so the editor guide
+    // is drawn locally instead of loading old character spritesheets.
+    this._charGuideImage = this._createBoxCharacterGuideCanvas(64, 64, 'down');
     this._charGuideIsAnimSheet = false;
     this._charGuideAnimType = null;
     this._charGuideAnimDir = null;
-    const customs = this._getCustomSprites();
-    const guideSrc = customs['char_idle_down']
-      ? customs['char_idle_down'].dataUrl
-      : 'assets/char/Idle_Down.png';
+    this._charGuideFrameWidth = 64;
+    this._charGuideFrameHeight = 64;
+    this._charGuideFrames = 1;
+    this._redrawDisplay();
+  }
 
-    const img = new Image();
-    img.onload = () => {
-      this._charGuideImage = img;
-      this._charGuideIsAnimSheet = false;
-      this._redrawDisplay();
+  _createBoxCharacterGuideCanvas(width = 64, height = 64, dir = 'down') {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    const sx = width / 64;
+    const sy = height / 64;
+    const rect = (x, y, w, h, color) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(Math.round(x * sx), Math.round(y * sy), Math.round(w * sx), Math.round(h * sy));
     };
-    img.src = guideSrc;
+    const stroke = (x, y, w, h, color, lineWidth = 1) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1, Math.round(lineWidth * Math.max(sx, sy)));
+      ctx.strokeRect(Math.round(x * sx) + 0.5, Math.round(y * sy) + 0.5, Math.round(w * sx), Math.round(h * sy));
+    };
+
+    rect(14, 52, 36, 6, 'rgba(0,0,0,0.35)');
+    rect(16, 16, 32, 32, 'rgba(37,99,235,0.45)');
+    stroke(16, 16, 32, 32, 'rgba(147,197,253,0.95)', 2);
+    rect(24, 28, 6, 6, 'rgba(255,255,255,0.85)');
+    rect(34, 28, 6, 6, 'rgba(255,255,255,0.85)');
+    rect(25, 29, 3, 3, 'rgba(17,24,39,0.9)');
+    rect(35, 29, 3, 3, 'rgba(17,24,39,0.9)');
+    rect(26, 40, 12, 3, 'rgba(17,24,39,0.9)');
+
+    stroke(16, 20, 32, 40, 'rgba(34,211,238,0.9)', 1);
+    stroke(16, 16, 32, 32, 'rgba(250,204,21,0.75)', 1);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.font = `${Math.max(7, Math.round(8 * sx))}px monospace`;
+    ctx.fillText(`box:${dir}`, Math.round(2 * sx), Math.round(10 * sy));
+    return canvas;
   }
 
   _loadSprite() {
@@ -906,15 +1394,119 @@ export class SpriteEditor {
       };
       img.src = spr.path;
     } else {
-      // Programmatic sprite - blank canvas
       const w = spr.type === 'spritesheet' ? spr.frameWidth * spr.frames : spr.frameWidth;
       const h = spr.frameHeight;
       this._initNativeCanvas(w, h);
+      this._drawProgrammaticSprite(spr);
       this.undoStack = [];
       this.redoStack = [];
       this._redrawDisplay();
       this._renderTools();
     }
+  }
+
+  _drawProgrammaticSprite(spr) {
+    if (!this.nativeCtx || !spr) return;
+    const ctx = this.nativeCtx;
+    const fw = spr.frameWidth || this.nativeCanvas.width;
+    const fh = spr.frameHeight || this.nativeCanvas.height;
+    const frames = spr.type === 'spritesheet' ? Math.max(1, spr.frames || 1) : 1;
+
+    for (let frame = 0; frame < frames; frame++) {
+      const ox = frame * fw;
+      this._drawProgrammaticFrame(ctx, spr.key, ox, 0, fw, fh, frame, frames);
+    }
+  }
+
+  _drawProgrammaticFrame(ctx, key, ox, oy, w, h, frame = 0, frames = 1) {
+    ctx.clearRect(ox, oy, w, h);
+    const rect = (x, y, rw, rh, color) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(Math.round(ox + x), Math.round(oy + y), Math.round(rw), Math.round(rh));
+    };
+    const stroke = (x, y, rw, rh, color, lineWidth = 1) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.strokeRect(Math.round(ox + x) + 0.5, Math.round(oy + y) + 0.5, Math.round(rw), Math.round(rh));
+    };
+    const circle = (x, y, r, color) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(ox + x, oy + y, r, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    const line = (x1, y1, x2, y2, color, lineWidth = 2) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+      ctx.moveTo(ox + x1, oy + y1);
+      ctx.lineTo(ox + x2, oy + y2);
+      ctx.stroke();
+    };
+
+    if (key.startsWith('player_') || key === 'player_base' || key === 'player_box') {
+      rect(14, 52, 36, 6, 'rgba(0,0,0,0.35)');
+      rect(16, 16, 32, 32, '#2563eb');
+      stroke(16, 16, 32, 32, '#93c5fd', 3);
+      rect(24, 28, 6, 6, '#ffffff');
+      rect(34, 28, 6, 6, '#ffffff');
+      rect(25, 29, 3, 3, '#111827');
+      rect(35, 29, 3, 3, '#111827');
+      rect(26, 40, 12, 3, '#111827');
+      if (frames > 1) rect(8 + frame * 2, 8, 6, 4, '#facc15');
+      return;
+    }
+
+    if (key === 'icon_potion') {
+      rect(10, 12, 12, 18, '#cc3333');
+      rect(12, 7, 8, 7, '#886644');
+      rect(12, 5, 8, 3, '#aa8855');
+      rect(13, 17, 4, 9, '#ff6666');
+      return;
+    }
+    if (key === 'icon_material') {
+      rect(8, 13, 16, 12, '#88aa66');
+      rect(10, 9, 12, 6, '#aacc88');
+      rect(14, 4, 4, 7, '#667744');
+      return;
+    }
+    if (key.startsWith('icon_')) {
+      rect(8, 8, w - 16, h - 16, '#5b6ee1');
+      stroke(8, 8, w - 16, h - 16, '#a7b1ff', 2);
+      rect(w / 2 - 2, 4, 4, h - 8, '#f7d56b');
+      return;
+    }
+
+    if (key === 'fx_slash' || key === 'fx_heavy_slash') {
+      line(22, 70, 72, 20, '#ffffff', 8);
+      line(25, 72, 75, 22, '#66ccff', 4);
+      if (key === 'fx_heavy_slash') {
+        line(24, 22, 72, 70, '#ffffff', 7);
+        line(27, 24, 75, 72, '#ffaa66', 4);
+      }
+      return;
+    }
+    if (key === 'fx_lightning') {
+      line(52, 8, 34, 42, '#ffff88', 7);
+      line(34, 42, 52, 42, '#ffff88', 7);
+      line(52, 42, 34, 88, '#ffff88', 7);
+      line(54, 8, 36, 88, '#ffffff', 2);
+      return;
+    }
+    if (key === 'fx_heal') {
+      circle(48, 48, 28, 'rgba(68,255,136,0.35)');
+      rect(43, 24, 10, 52, '#66ff99');
+      rect(24, 43, 52, 10, '#66ff99');
+      return;
+    }
+    if (key.startsWith('fx_')) {
+      circle(w / 2, h / 2, Math.min(w, h) / 3, 'rgba(255,120,80,0.55)');
+      circle(w / 2, h / 2, Math.min(w, h) / 5, 'rgba(255,240,140,0.9)');
+      return;
+    }
+
+    rect(0, 0, w, h, '#202033');
+    stroke(2, 2, w - 4, h - 4, '#666688', 1);
   }
 
   _initNativeCanvas(w, h) {
@@ -1015,6 +1607,25 @@ export class SpriteEditor {
       this.displayCtx.fillText('갑옷', 2, neckY + 12);
       this.displayCtx.fillText('허리', 2, waistY + 12);
       this.displayCtx.fillText('신발', 2, kneeY + 12);
+      // Current generated player guide: 64x64 box body and collision area.
+      const boxBodyX = Math.round(spr.frameWidth * 16 / 64) * this.zoom;
+      const boxBodyY = Math.round(spr.frameHeight * 16 / 64) * this.zoom;
+      const boxBodyW = Math.round(spr.frameWidth * 32 / 64) * this.zoom;
+      const boxBodyH = Math.round(spr.frameHeight * 32 / 64) * this.zoom;
+      const boxHitX = Math.round(spr.frameWidth * 16 / 64) * this.zoom;
+      const boxHitY = Math.round(spr.frameHeight * 20 / 64) * this.zoom;
+      const boxHitW = Math.round(spr.frameWidth * 32 / 64) * this.zoom;
+      const boxHitH = Math.round(spr.frameHeight * 40 / 64) * this.zoom;
+      this.displayCtx.setLineDash([6, 3]);
+      this.displayCtx.strokeStyle = 'rgba(34, 211, 238, 0.75)';
+      this.displayCtx.strokeRect(boxBodyX, boxBodyY, boxBodyW, boxBodyH);
+      this.displayCtx.strokeStyle = 'rgba(250, 204, 21, 0.65)';
+      this.displayCtx.strokeRect(boxHitX, boxHitY, boxHitW, boxHitH);
+      this.displayCtx.setLineDash([]);
+      this.displayCtx.fillStyle = 'rgba(34, 211, 238, 0.8)';
+      this.displayCtx.fillText('box body', boxBodyX + 2, boxBodyY + 12);
+      this.displayCtx.fillStyle = 'rgba(250, 204, 21, 0.8)';
+      this.displayCtx.fillText('hitbox', boxHitX + 2, boxHitY + boxHitH - 4);
     }
 
     // Draw sprite scaled
@@ -1024,22 +1635,73 @@ export class SpriteEditor {
       0, 0, dw, dh
     );
 
-    // Draw grid
+    // Draw 1-pixel cell grid. Every line marks one native sprite pixel.
     if (this.showGrid && this.zoom >= 4) {
-      this.displayCtx.strokeStyle = 'rgba(255,255,255,0.08)';
       this.displayCtx.lineWidth = 1;
       for (let x = 0; x <= dw; x += this.zoom) {
+        const cell = Math.round(x / this.zoom);
+        this.displayCtx.strokeStyle = cell % 8 === 0 ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.10)';
         this.displayCtx.beginPath();
         this.displayCtx.moveTo(x + 0.5, 0);
         this.displayCtx.lineTo(x + 0.5, dh);
         this.displayCtx.stroke();
       }
       for (let y = 0; y <= dh; y += this.zoom) {
+        const cell = Math.round(y / this.zoom);
+        this.displayCtx.strokeStyle = cell % 8 === 0 ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.10)';
         this.displayCtx.beginPath();
         this.displayCtx.moveTo(0, y + 0.5);
         this.displayCtx.lineTo(dw, y + 0.5);
         this.displayCtx.stroke();
       }
+    }
+
+    // Draw inventory box guide
+    if (this.showInvGuide) {
+      // Inventory cell is 42x42, usable icon area is 36x36 (3px padding each side)
+      // Icon is auto-scaled to fit: scale = min(36/sprW, 36/sprH, 2.5)
+      const invCell = 42;
+      const invPad = 3;
+      const invUsable = invCell - invPad * 2; // 36px max icon display area
+
+      const fitScale = Math.min(invUsable / srcW, invUsable / srcH, 2.5);
+      const renderW = srcW * fitScale;
+      const renderH = srcH * fitScale;
+
+      // Map from game render coordinates to editor canvas coordinates
+      // In game: icon is centered in cell. In editor: show how much of the sprite fits.
+      // Show the 36x36 usable zone mapped onto the sprite's native pixels
+      const usablePixW = invUsable / fitScale; // how many native pixels fit in 36px
+      const usablePixH = invUsable / fitScale;
+
+      // Draw the "safe zone" box centered on the sprite
+      const safeL = ((srcW - usablePixW) / 2) * this.zoom;
+      const safeT = ((srcH - usablePixH) / 2) * this.zoom;
+      const safeW = usablePixW * this.zoom;
+      const safeH = usablePixH * this.zoom;
+
+      // Dim area outside the safe zone
+      this.displayCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      // Top strip
+      if (safeT > 0) this.displayCtx.fillRect(0, 0, dw, safeT);
+      // Bottom strip
+      if (safeT + safeH < dh) this.displayCtx.fillRect(0, safeT + safeH, dw, dh - safeT - safeH);
+      // Left strip
+      if (safeL > 0) this.displayCtx.fillRect(0, safeT, safeL, safeH);
+      // Right strip
+      if (safeL + safeW < dw) this.displayCtx.fillRect(safeL + safeW, safeT, dw - safeL - safeW, safeH);
+
+      // Draw the safe zone border
+      this.displayCtx.strokeStyle = 'rgba(255, 170, 68, 0.8)';
+      this.displayCtx.lineWidth = 2;
+      this.displayCtx.setLineDash([6, 3]);
+      this.displayCtx.strokeRect(safeL, safeT, safeW, safeH);
+      this.displayCtx.setLineDash([]);
+
+      // Label
+      this.displayCtx.fillStyle = 'rgba(255, 170, 68, 0.9)';
+      this.displayCtx.font = '11px monospace';
+      this.displayCtx.fillText(`인벤토리 (${invCell}×${invCell}, ${Math.round(fitScale * 100)}%)`, safeL + 2, safeT - 4 > 12 ? safeT - 4 : safeT + 14);
     }
   }
 
@@ -1355,10 +2017,48 @@ export class SpriteEditor {
       height: this.nativeCanvas.height,
       frameWidth: spr.frameWidth,
       frameHeight: spr.frameHeight,
+      category: spr.category || '커스텀',
     };
+    if (spr.baseSpriteKey && spr.key !== spr.baseSpriteKey && !spr.characterSpriteRole && !customs[spr.baseSpriteKey]) {
+      const baseCanvas = document.createElement('canvas');
+      baseCanvas.width = spr.frameWidth;
+      baseCanvas.height = spr.frameHeight;
+      customs[spr.baseSpriteKey] = {
+        dataUrl: baseCanvas.toDataURL('image/png'),
+        width: spr.frameWidth,
+        height: spr.frameHeight,
+        frameWidth: spr.frameWidth,
+        frameHeight: spr.frameHeight,
+      };
+    }
     try {
       localStorage.setItem(CUSTOM_SPRITES_KEY, JSON.stringify(customs));
+      if (spr.itemId && spr.baseSpriteKey && this.dm?.data?.items?.[spr.itemId]) {
+        this.dm.data.items[spr.itemId].spriteKey = spr.baseSpriteKey;
+        this.dm.save();
+      }
+      if (spr.itemId && spr.spriteRole === 'itemIcon' && this.dm?.data?.items?.[spr.itemId]) {
+        this.dm.data.items[spr.itemId].iconKey = spr.key;
+        this.dm.save();
+      }
+      if (spr.characterSpriteRole === 'base') {
+        if (!this.dm.data.mainCharacter) this.dm.data.mainCharacter = {};
+        this.dm.data.mainCharacter.spriteKey = spr.key;
+        this.dm.save();
+      }
       if (window.showToast) window.showToast(`${spr.name} 스프라이트가 저장되었습니다.`, 'success');
+      if (spr.skillId && this.dm?.data?.skills?.[spr.skillId]) {
+        const skill = this.dm.data.skills[spr.skillId];
+        if (spr.spriteRole === 'skillIcon') {
+          skill.iconKey = spr.key;
+        } else if (spr.spriteRole === 'skillEffect') {
+          skill.effectKey = spr.key;
+          skill.effectSpriteKey = spr.key;
+        } else if (spr.spriteRole === 'skillCast') {
+          skill.castSpriteKey = spr.key;
+        }
+        this.dm.save();
+      }
       this._renderBrowser();
       this._renderTools();
     } catch (e) {
@@ -1608,6 +2308,7 @@ export class SpriteEditor {
               height: img.height,
               frameWidth: frameW,
               frameHeight: frameH,
+              category,
             };
             localStorage.setItem(CUSTOM_SPRITES_KEY, JSON.stringify(customs));
 
@@ -1637,6 +2338,7 @@ export class SpriteEditor {
           height: h,
           frameWidth: frameW,
           frameHeight: frameH,
+          category,
         };
         localStorage.setItem(CUSTOM_SPRITES_KEY, JSON.stringify(customs));
 

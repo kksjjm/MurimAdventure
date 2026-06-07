@@ -2,12 +2,12 @@
 // SkillCombinationSystem.js - Skill Fusion / Combination
 // =============================================================================
 
-import { DEFAULT_SKILL_COMBINATIONS, SKILLS_BY_ID } from '../../data/defaultData.js';
+import { getGameData } from '../../data/GameDataLoader.js';
 
 export default class SkillCombinationSystem {
   constructor(scene) {
     this.scene = scene;
-    this.combinations = [...DEFAULT_SKILL_COMBINATIONS];
+    this.combinations = [...getGameData().skillCombinations];
   }
 
   /**
@@ -86,7 +86,7 @@ export default class SkillCombinationSystem {
       for (const [skillId, reqExp] of Object.entries(profReq)) {
         const currentExp = this.scene.proficiencySystem.getProficiencyExp('skill', skillId);
         if (currentExp < reqExp) {
-          const skillData = SKILLS_BY_ID[skillId];
+          const skillData = getGameData().skills[skillId];
           const skillName = skillData ? (skillData.nameKo || skillData.name) : skillId;
           return {
             success: false,

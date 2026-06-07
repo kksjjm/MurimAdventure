@@ -1,0 +1,14 @@
+{
+  "default": {
+    "monstersPerArea": 8,
+    "respawnTime": 15000,
+    "types": [
+      "monster_training_box",
+      "monster_aggressive_box"
+    ],
+    "weights": [
+      70,
+      30
+    ]
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "skill_slash": {
+    "id": "skill_slash",
+    "skill_template_id": "skill_slash",
+    "module_id": "skill_system",
+    "name": "Slash",
+    "nameKo": "베기",
+    "description": "combat_action_templates와 hitbox_templates를 참조하는 근접 스킬입니다.",
+    "skill_category": "melee",
+    "category": "melee",
+    "target_type": "monster_only",
+    "action_id": "action_basic_slash",
+    "base_effect_id": "effect_slash_damage",
+    "hitbox_id": "hitbox_slash_small",
+    "isActive": true,
+    "mpCost": 0,
+    "hpCost": 0,
+    "cooldown": 700,
+    "baseDamage": 12,
+    "skill_multiplier": 1,
+    "element": "NONE",
+    "damageType": "PHYSICAL",
+    "range": 56,
+    "effects": [
+      {
+        "type": "DAMAGE",
+        "scaling": {
+          "ATK": 0.8,
+          "STR": 0.4
+        }
+      }
+    ],
+    "proficiencyGain": 2
+  },
+  "skill_bolt": {
+    "id": "skill_bolt",
+    "skill_template_id": "skill_bolt",
+    "module_id": "skill_system",
+    "name": "Bolt Shot",
+    "nameKo": "볼트 샷",
+    "description": "투사체 템플릿을 쓰는 원거리 스킬 예시입니다.",
+    "skill_category": "ranged",
+    "category": "ranged",
+    "target_type": "monster_only",
+    "action_id": "action_projectile_shot",
+    "base_effect_id": "effect_bolt_damage",
+    "hitbox_id": "hitbox_projectile_small",
+    "isActive": true,
+    "mpCost": 8,
+    "hpCost": 0,
+    "cooldown": 1800,
+    "baseDamage": 18,
+    "skill_multiplier": 1.2,
+    "element": "LIGHTNING",
+    "damageType": "MAGICAL",
+    "range": 180,
+    "effects": [
+      {
+        "type": "DAMAGE",
+        "scaling": {
+          "INT": 0.9
+        }
+      }
+    ],
+    "proficiencyGain": 3
+  },
+  "skill_recover_channel": {
+    "id": "skill_recover_channel",
+    "skill_template_id": "skill_recover_channel",
+    "module_id": "skill_system",
+    "name": "Recover Channel",
+    "nameKo": "채널 회복",
+    "description": "지속시간/채널링 효과 설계 예시입니다.",
+    "skill_category": "support",
+    "category": "support",
+    "target_type": "self",
+    "isActive": true,
+    "mpCost": 0,
+    "hpCost": 0,
+    "cooldown": 12000,
+    "duration": 4000,
+    "baseDamage": 0,
+    "element": "LIGHT",
+    "damageType": null,
+    "range": 0,
+    "effects": [
+      {
+        "type": "CHANNEL_REGEN",
+        "stat": "MP",
+        "percentPerSec": 8,
+        "duration": 4000
+      }
+    ],
+    "proficiencyGain": 3
+  }
+}

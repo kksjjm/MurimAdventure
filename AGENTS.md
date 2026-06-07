@@ -53,28 +53,12 @@ MurimAdventure/
 ├── vite.config.js            # Multi-page build (game + admin)
 ├── index.html                # Game entry HTML
 ├── admin.html                # Admin panel entry HTML
-├── CLAUDE.md                 # This documentation
-│
-├── public/
-│   └── data/                 # === JSON Data Files (node scripts/exportData.mjs로 생성) ===
-│       ├── items.json        # 아이템 52종 (무기/방어구/장신구/소모품)
-│       ├── skills.json       # 스킬 14종 (심법/무공/경공/주술)
-│       ├── monsters.json     # 몬스터 6종
-│       ├── skillCombinations.json  # 스킬 합성 레시피 3종
-│       ├── spawnConfig.json  # 몬스터 스폰 설정
-│       ├── config.json       # 플레이어 기본값, 레벨업 성장치
-│       ├── maps.json         # 맵 3종 (타일/포탈/스폰 정보)
-│       ├── npcs.json         # NPC 5명 (대화/상점/퀘스트)
-│       └── quests.json       # 퀘스트 4종
-│
-├── scripts/
-│   └── exportData.mjs        # 전체 게임 데이터 → JSON 파일 추출 스크립트
+├── AGENTS.md                 # This documentation
 │
 ├── src/
 │   ├── data/                 # === Shared Game Data Definitions ===
 │   │   ├── constants.js      # All game enums & constants (STATS, EQUIPMENT_SLOTS, etc.)
-│   │   ├── defaultData.js    # Hardcoded default items/skills/monsters (fallback)
-│   │   ├── GameDataLoader.js # **통합 데이터 로더** (localStorage admin → defaults 폴백)
+│   │   ├── defaultData.js    # Sample items/skills/monsters/player defaults
 │   │   └── gameConfig.js     # Phaser config, balance formulas
 │   │
 │   ├── game/                 # === Game Client ===
@@ -108,8 +92,7 @@ MurimAdventure/
 │   │       ├── MapTransitionSystem.js    # Map transition with fade effects
 │   │       ├── DialogueSystem.js         # NPC dialogue UI
 │   │       ├── ShopSystem.js             # Buy/sell shop UI
-│   │       ├── QuestSystem.js            # Quest tracking and completion
-│   │       └── ItemPickupSystem.js       # 아이템 드롭/픽업 공통 로직
+│   │       └── QuestSystem.js            # Quest tracking and completion
 │   │
 │   └── admin/                # === Admin Panel ===
 │       ├── admin.js          # SPA controller + dashboard
@@ -155,34 +138,6 @@ MurimAdventure/
 ---
 
 ## Data Architecture
-
-### Data Flow (관리자 → 게임 연동)
-```
-관리자 패널 (admin.html)
-    ↓ 편집/저장
-localStorage['murimAdventure_adminData']  ← 아이템/스킬/몬스터/설정 전부 저장
-    ↓ 게임 시작 시 자동 로드
-GameDataLoader.js → loadGameData()
-    ↓ localStorage 없으면
-defaultData.js (하드코딩 폴백)
-    ↓ 
-게임 씬들 (PreloadScene → WorldScene 등)
-```
-
-- **localStorage 키**: `murimAdventure_adminData` (관리자 데이터), `murimAdventure_customSprites` (스프라이트)
-- **JSON 파일** (`public/data/`): `node scripts/exportData.mjs`로 생성, 관리자 패널에서 "게임 데이터 파일 내보내기"로 다운로드 가능
-- **GameDataLoader.js**: 게임의 모든 씬/시스템이 사용하는 통합 데이터 접근 모듈. `getGameData()`로 items/skills/monsters 등 조회
-
-### 데이터-스프라이트 연동 현황
-
-| 엔티티 | spriteKey 필드 | 에디터 UI | 스프라이트 에디터 연동 | 인게임 반영 |
-|--------|---------------|----------|---------------------|-----------|
-| 장비 아이템 | `spriteKey` | ItemEditor | 아이템 장비 카테고리 | CustomSpriteLoader → Player.js |
-| 소모품 | `spriteKey`/`iconKey` | ItemEditor | 소모품 카테고리 | getGameData().items |
-| 몬스터 | `spriteKey` | MonsterEditor (드롭다운) | 몬스터 카테고리 (idle/run/death) | Monster.js (admin → default 폴백) |
-| 스킬 | `iconKey`, `effectKey` | SkillEditor | 스킬/이펙트 카테고리 | getGameData().skills |
-| 탈것 | `spriteKey` | MountPetEditor | 탈것/환수 카테고리 | (인게임 미구현) |
-| 환수 | `spriteKey` | MountPetEditor | 탈것/환수 카테고리 | (인게임 미구현) |
 
 ### constants.js - Game Enums
 - `STATS` (20종): HP, MP, STR, AGI, INT, LUK, DEF, ATK, EVASION, ACCURACY, CRIT_RATE, CRIT_DMG, SPIRIT, ITEM_FIND, MOVE_SPEED, ATK_SPEED, HP_REGEN, MP_REGEN, DMG_BONUS(가하는피해%), DMG_TAKEN(받는피해%)
@@ -307,8 +262,6 @@ defaultData.js (하드코딩 폴백)
 
 ### Equipment Visual & Animation System (Player.js)
 - 장비 슬롯별 레이어 스프라이트 오버레이 (9개 레이어)
-- **아이템별 커스텀 스프라이트**: `equipped.spriteKey`가 있으면 무기/방어구 모두 아이템 고유 스프라이트 우선 사용
-  - spriteKey 없으면 무기는 `WEAPON_TYPE_SPRITE_MAP`/`WEAPON_GRIP_SPRITE_MAP` 폴백, 방어구는 슬롯 기본 텍스처 폴백
 - **프레임 동기화 애니메이션**: 장비별 9종 애니메이션 스프라이트시트 지원
   - 네이밍: `{spriteKey}_{animType}_{direction}`
   - 애니메이션 유형: idle(대기), walk(걷기), slice(공격) × down/side/up = 9개
@@ -370,7 +323,7 @@ defaultData.js (하드코딩 폴백)
 | StatsConfigEditor | 레벨업 성장률, 전투 공식 계수, 경험치 커브 |
 | GameSettingsEditor | 게임 전역 설정, 기능 토글 |
 | DataManager | JSON 내보내기/가져오기, 백업/복원 |
-| SpriteEditor | 스프라이트 브라우저 (장비/몬스터/NPC/스킬/소모품/탈것/환수 통합), 새 스프라이트 생성, 픽셀아트 에디터, **장비 애니메이션 세트 관리**, 커스텀 스프라이트 저장 + 인게임 자동 반영 |
+| SpriteEditor | 스프라이트 브라우저, 새 스프라이트 생성, 픽셀아트 에디터, **장비 애니메이션 세트 관리** (9종 애니메이션 슬롯별 생성/편집, 프레임별 캐릭터 가이드 오버레이), 커스텀 스프라이트 저장 |
 
 ---
 
@@ -397,7 +350,7 @@ defaultData.js (하드코딩 폴백)
 - [x] 플레이어 ↔ 몬스터 ↔ NPC 충돌 시스템
 - [x] HUD (HP/MP/EXP 바, 스킬 슬롯 쿨다운/지속시간, 메뉴 버튼)
 - [x] 인벤토리/장비/스킬/캐릭터 정보 패널 (호버 툴팁, baseATK/baseDEF 표시)
-- [x] 아이템 52종 (무기 10종, 갑옷 5종, 투구 4종, 하의 3종, 신발 4종, 장갑 3종, 허리띠 3종, 방패 3종, 장신구 14종, 소모품 4종)
+- [x] 아이템 49종 (무기 10종, 갑옷 5종, 투구 4종, 하의 3종, 신발 4종, 장갑 3종, 허리띠 3종, 방패 3종, 장신구 14종)
 - [x] 경험치/레벨업 시스템
 - [x] 미니맵
 - [x] **세이브/로드 시스템** (F5/F9 핫키, 60초 자동저장, 파일 내보내기/가져오기)
@@ -432,9 +385,6 @@ defaultData.js (하드코딩 폴백)
 - Data constants use UPPER_SNAKE_CASE
 - Real sprite assets in public/assets/ (loaded in BootScene.preload())
 - Programmatic textures in BootScene.create() as fallback
-- Custom sprites stored in localStorage (with category metadata), loaded via CustomSpriteLoader
-- Equipment items with `spriteKey` field use item-specific custom sprite over slot defaults
-- **Game data access**: `getGameData()` from `GameDataLoader.js` (NOT direct `defaultData.js` import). Admin edits in localStorage are auto-loaded
-- **Data files**: `public/data/*.json` - exportable/importable via admin panel or `node scripts/exportData.mjs`
+- Custom sprites stored in localStorage, loaded via CustomSpriteLoader
 - Save data versioned (version: 1) for future migration
 - Weapon items have baseATK, baseATK_SPEED, baseRange; armor has baseDEF

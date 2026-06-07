@@ -195,6 +195,20 @@ export class SkillEditor {
           </div>
           <div class="form-group"><label>무기 요구</label><input type="text" id="editSkillWeaponReq" value="${skill.weaponReq || ''}" placeholder="sword, staff 등 (빈값 = 없음)"></div>
 
+          <h4 style="color:var(--gold);font-size:13px;margin:12px 0 6px;">스프라이트</h4>
+          <div class="form-row">
+            <div class="form-group">
+              <label>아이콘 키</label>
+              <input type="text" id="editSkillIcon" value="${skill.iconKey || ''}" placeholder="예: skill_icon_fireball">
+              <small style="color:var(--text-dim);font-size:10px;">스킬 슬롯에 표시될 아이콘</small>
+            </div>
+            <div class="form-group">
+              <label>이펙트 키</label>
+              <input type="text" id="editSkillEffect2" value="${skill.effectKey || ''}" placeholder="예: fx_fire">
+              <small style="color:var(--text-dim);font-size:10px;">스킬 사용 시 재생될 이펙트</small>
+            </div>
+          </div>
+
           <h4 style="color:var(--gold);font-size:13px;margin:12px 0 6px;">스케일링 계수</h4>
           <div class="kv-list" id="scalingList">${scalingRows}</div>
           <button class="btn btn-secondary btn-small" id="addScaleBtn" style="margin-top:6px;">+ 스케일링 추가</button>
@@ -251,6 +265,7 @@ export class SkillEditor {
       }
 
       const saved = {
+        ...skill,
         id,
         name: overlay.querySelector('#editSkillName').value.trim(),
         description: overlay.querySelector('#editSkillDesc').value.trim(),
@@ -267,6 +282,8 @@ export class SkillEditor {
         proficiencyGain: parseInt(overlay.querySelector('#editSkillProf').value) || 0,
         levelReq: parseInt(overlay.querySelector('#editSkillLevel').value) || 1,
         weaponReq: overlay.querySelector('#editSkillWeaponReq').value.trim() || null,
+        iconKey: overlay.querySelector('#editSkillIcon').value.trim() || null,
+        effectKey: overlay.querySelector('#editSkillEffect2').value.trim() || null,
         effect,
       };
 

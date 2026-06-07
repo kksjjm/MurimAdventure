@@ -1,0 +1,92 @@
+{
+  "weapon_sword_001": {
+    "id": "weapon_sword_001",
+    "item_template_id": "weapon_sword_001",
+    "module_id": "equipment_system",
+    "templateKind": "template",
+    "name": "Prototype Sword",
+    "nameKo": "프로토타입 한손검",
+    "description": "새 DB 설계의 weapon_templates 예시 장비입니다.",
+    "item_category": "equipment",
+    "type": "WEAPON",
+    "slot": "WEAPON",
+    "weaponType": "ONE_HAND_WEAPON",
+    "weaponGrip": "ONE_HANDED",
+    "grade": "G01",
+    "rarity": "G01",
+    "levelReq": 1,
+    "max_stack": 1,
+    "maxStack": 1,
+    "stackable": false,
+    "min_attack": 3,
+    "max_attack": 7,
+    "attack_range": 1.5,
+    "baseATK": 5,
+    "baseATK_SPEED": 80,
+    "baseRange": 48,
+    "stats": {
+      "ACCURACY": 5
+    },
+    "spriteKey": null
+  },
+  "armor_cloth_001": {
+    "id": "armor_cloth_001",
+    "item_template_id": "armor_cloth_001",
+    "module_id": "equipment_system",
+    "templateKind": "template",
+    "name": "Prototype Armor",
+    "nameKo": "프로토타입 방어구",
+    "description": "equipment_templates 예시 방어구입니다.",
+    "item_category": "equipment",
+    "type": "ARMOR",
+    "slot": "ARMOR",
+    "grade": "G05",
+    "rarity": "G05",
+    "levelReq": 1,
+    "max_stack": 1,
+    "maxStack": 1,
+    "stackable": false,
+    "baseDEF": 4,
+    "stats": {
+      "maxHP": 20
+    },
+    "spriteKey": null
+  },
+  "consumable_hp_001": {
+    "id": "consumable_hp_001",
+    "item_template_id": "consumable_hp_001",
+    "module_id": "item_system",
+    "templateKind": "template",
+    "name": "Small HP Kit",
+    "nameKo": "소형 체력 키트",
+    "description": "소비품 템플릿 예시입니다.",
+    "item_category": "consumable",
+    "type": "CONSUMABLE",
+    "grade": "G05",
+    "rarity": "G05",
+    "stackable": true,
+    "max_stack": 99,
+    "maxStack": 99,
+    "effect": {
+      "type": "heal",
+      "stat": "HP",
+      "amount": 50
+    }
+  },
+  "material_core_001": {
+    "id": "material_core_001",
+    "item_template_id": "material_core_001",
+    "module_id": "item_system",
+    "templateKind": "template",
+    "name": "Test Core Fragment",
+    "nameKo": "테스트 코어 조각",
+    "description": "제작/강화 모듈용 재료 샘플입니다.",
+    "item_category": "material",
+    "type": "MATERIAL",
+    "grade": "G04",
+    "rarity": "G04",
+    "stackable": true,
+    "max_stack": 999,
+    "maxStack": 999
+  }
+}

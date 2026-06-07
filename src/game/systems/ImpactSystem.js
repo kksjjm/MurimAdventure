@@ -18,6 +18,12 @@ const ELEMENT_FX_MAP = {
   NONE: null,
 };
 
+const BASE_EFFECT_FX_MAP = {
+  effect_slash_damage: 'fx_slash',
+  effect_bolt_damage: 'fx_lightning',
+  effect_recover_channel: 'fx_heal',
+};
+
 // Map skill categories/types to default effects
 const SKILL_FX_MAP = {
   MUGONG_INTERNAL: 'fx_qi_wave',
@@ -73,12 +79,22 @@ export default class ImpactSystem {
     // Determine which effect to use
     let fxKey = null;
 
-    // Priority 1: element-based
-    if (skill.element && skill.element !== 'NONE') {
+    // Priority 1: skill-specific custom effect from admin data
+    if (skill.effectKey && scene.textures.exists(skill.effectKey)) {
+      fxKey = skill.effectKey;
+    } else if (skill.effectSpriteKey && scene.textures.exists(skill.effectSpriteKey)) {
+      fxKey = skill.effectSpriteKey;
+    } else if (skill.base_effect_id) {
+      const baseFxKey = BASE_EFFECT_FX_MAP[skill.base_effect_id];
+      if (baseFxKey && scene.textures.exists(baseFxKey)) fxKey = baseFxKey;
+    }
+
+    // Priority 2: element-based
+    if (!fxKey && skill.element && skill.element !== 'NONE') {
       fxKey = ELEMENT_FX_MAP[skill.element];
     }
 
-    // Priority 2: skill type based
+    // Priority 3: skill type based
     if (!fxKey) {
       if (skill.category === 'MUGONG') {
         fxKey = skill.type === 'INTERNAL' ? 'fx_qi_wave' : 'fx_fist';
@@ -91,15 +107,12 @@ export default class ImpactSystem {
       }
     }
 
-    // Play the main effect
+    // Play the main effect centered on target (monster)
     this._playCenteredEffect(target.x, target.y, fxKey, {
       scale: 1.2,
       duration: 500,
       shake: true,
     });
-
-    // Additional directional effect from attacker to target
-    this._playProjectileTrail(attacker, target, skill);
 
     // Stronger screen shake for skills
     scene.cameras.main.shake(120, 0.006);
@@ -107,7 +120,7 @@ export default class ImpactSystem {
     // Target flash
     this._flashTarget(target);
 
-    // More particles for skills
+    // Particles on target
     const particleColor = this._getElementColor(skill.element);
     this._spawnHitParticles(target.x, target.y, particleColor, 12);
   }
@@ -242,42 +255,6 @@ export default class ImpactSystem {
 
     if (shake) {
       scene.cameras.main.shake(80, 0.004);
-    }
-  }
-
-  _playProjectileTrail(attacker, target, skill) {
-    const scene = this.scene;
-
-    // Create a trail of particles from attacker to target
-    const dx = target.x - attacker.x;
-    const dy = target.y - attacker.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 10) return;
-
-    const steps = Math.min(5, Math.floor(dist / 15));
-    const color = this._getElementColor(skill.element);
-
-    for (let i = 0; i < steps; i++) {
-      const t = (i + 1) / (steps + 1);
-      const px = attacker.x + dx * t;
-      const py = attacker.y + dy * t;
-
-      scene.time.delayedCall(i * 30, () => {
-        const particle = scene.add.graphics();
-        particle.fillStyle(color, 0.7);
-        particle.fillCircle(0, 0, 4 - i * 0.5);
-        particle.setPosition(px, py);
-        particle.setDepth(998);
-
-        scene.tweens.add({
-          targets: particle,
-          alpha: 0,
-          scaleX: 2,
-          scaleY: 2,
-          duration: 200,
-          onComplete: () => particle.destroy(),
-        });
-      });
     }
   }
 

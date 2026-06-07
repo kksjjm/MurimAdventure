@@ -3,11 +3,8 @@
 // =============================================================================
 
 import Phaser from 'phaser';
-import {
-  DEFAULT_PLAYER_STATS, LEVEL_UP_GAINS, getExpForLevel,
-  ITEMS_BY_ID, SKILLS_BY_ID, DEFAULT_INVENTORY,
-  DEFAULT_STARTING_SKILLS, DEFAULT_SKILL_SLOTS,
-} from '../../data/defaultData.js';
+import { getGameData } from '../../data/GameDataLoader.js';
+import { getExpForLevel } from '../../data/defaultData.js';
 import { EQUIPMENT_SLOTS } from '../../data/constants.js';
 
 // Map weapon types to equipment layer texture keys
@@ -50,8 +47,11 @@ const RARITY_TINT = {
 
 export default class Player extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y) {
-    // Use the spritesheet texture if available, otherwise fall back to static texture
-    const initialTexture = scene.textures.exists('char_idle_down') ? 'char_idle_down' : 'player_base';
+    const gd = getGameData();
+    const configuredSprite = gd.mainCharacter?.spriteKey || 'player_base';
+    const initialTexture = scene.textures.exists(configuredSprite)
+      ? configuredSprite
+      : scene.textures.exists('player_base') ? 'player_base' : 'player_box';
     super(scene, x, y, initialTexture);
 
     scene.add.existing(this);
@@ -68,7 +68,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     // --- Core Stats ---
-    this.stats = { ...DEFAULT_PLAYER_STATS };
+    this.stats = { ...gd.playerDefaults };
 
     // --- Equipment: slot -> item data or null ---
     this.equipment = {};
@@ -80,13 +80,13 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.equipLayers = {};
 
     // --- Inventory: array of { itemId, quantity } ---
-    this.inventory = DEFAULT_INVENTORY.map((e) => ({ ...e }));
+    this.inventory = gd.defaultInventory.map((e) => ({ ...e }));
 
     // --- Skills: array of skill IDs ---
-    this.skills = [...DEFAULT_STARTING_SKILLS];
+    this.skills = [...gd.defaultStartingSkills];
 
     // --- Skill slots (hotbar 1-5) ---
-    this.skillSlots = [...DEFAULT_SKILL_SLOTS];
+    this.skillSlots = [...gd.defaultSkillSlots];
 
     // --- Skill cooldowns: { skillId: lastUsedTimestamp } ---
     this.skillCooldowns = {};
@@ -120,7 +120,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
   _equipStartingGear() {
     for (const inv of this.inventory) {
-      const item = ITEMS_BY_ID[inv.itemId];
+      const item = getGameData().items[inv.itemId];
       if (item && item.slot) {
         if (!this.equipment[item.slot]) {
           this.equip(item, item.slot);
@@ -173,13 +173,15 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
       // Determine base texture key
       let baseTexKey;
-      if (layer.slot === 'WEAPON') {
+      if (equipped.spriteKey && this.scene.textures.exists(equipped.spriteKey)) {
+        // Item-specific custom sprite takes priority for all slots
+        baseTexKey = equipped.spriteKey;
+      } else if (layer.slot === 'WEAPON') {
         baseTexKey = WEAPON_TYPE_SPRITE_MAP[equipped.weaponType]
           || WEAPON_GRIP_SPRITE_MAP[equipped.weaponGrip]
           || 'equip_weapon_sword';
       } else {
-        // Use item-specific sprite key if defined, else default
-        baseTexKey = equipped.spriteKey || layer.texKey;
+        baseTexKey = layer.texKey;
       }
 
       if (!baseTexKey) continue;
@@ -390,6 +392,15 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       });
     }
 
+    // Find nearest monster in attack range (directional cone)
+    const target = this._findAttackTarget();
+
+    // Gain weapon proficiency
+    this._updateProficiencyBonus();
+    if (weapon && weapon.weaponType && this.scene.proficiencySystem) {
+      this.scene.proficiencySystem.gainProficiency('weapon', weapon.weaponType, 3);
+    }
+
     // Lunge forward
     this.scene.tweens.add({
       targets: this,
@@ -403,28 +414,24 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       },
     });
 
-    // Gain weapon proficiency (weapon already declared above)
-    this._updateProficiencyBonus();
-    if (weapon && weapon.weaponType && this.scene.proficiencySystem) {
-      this.scene.proficiencySystem.gainProficiency('weapon', weapon.weaponType, 3);
-    }
-
-    // Find nearest monster in attack range (directional cone)
-    const target = this._findAttackTarget();
-
     if (target) {
-      const result = this.scene.combatSystem.performAttack(this, target);
+      // Capture target position before lunge changes things
+      const tx = target.x;
+      const ty = target.y;
 
-      // Spawn attack impact effect
-      if (result && result.hit) {
-        this.scene.impactSystem.playBasicAttack(this, target, weapon);
-        target.provoke();
-      }
+      // Delay impact to lunge peak (80ms) so effect appears on monster
+      this.scene.time.delayedCall(60, () => {
+        const result = this.scene.combatSystem.performAttack(this, target);
+        if (result && result.hit && this.scene.impactSystem) {
+          this.scene.impactSystem.playBasicAttack(this, target, weapon);
+          target.provoke();
+        }
+        this.scene.events.emit('player-stats-changed');
+      });
 
-      this.scene.events.emit('player-stats-changed');
-      return result;
+      return { pending: true };
     } else {
-      // Swing in air - still show slash
+      // Swing in air
       this.scene.impactSystem.playWhiff(this);
     }
 
@@ -500,7 +507,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   useSkill(skillId, target) {
-    const skill = SKILLS_BY_ID[skillId];
+    const skill = getGameData().skills[skillId];
     if (!skill) return null;
 
     const now = Date.now();
@@ -787,7 +794,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   // ==========================================================================
 
   addItem(itemId, quantity = 1) {
-    const itemData = ITEMS_BY_ID[itemId];
+    const itemData = getGameData().items[itemId];
     if (!itemData) return false;
 
     const existing = this.inventory.find((e) => e.itemId === itemId);
@@ -815,7 +822,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   useConsumable(itemId) {
-    const itemData = ITEMS_BY_ID[itemId];
+    const itemData = getGameData().items[itemId];
     if (!itemData || itemData.type !== 'CONSUMABLE') return false;
     if (!this.inventory.find((e) => e.itemId === itemId)) return false;
 
@@ -845,7 +852,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       this.stats.exp -= getExpForLevel(this.stats.level);
       this.stats.level += 1;
 
-      for (const [stat, gain] of Object.entries(LEVEL_UP_GAINS)) {
+      for (const [stat, gain] of Object.entries(getGameData().levelUpGains)) {
         this.stats[stat] = (this.stats[stat] || 0) + gain;
       }
       this.stats.HP = this.stats.maxHP;

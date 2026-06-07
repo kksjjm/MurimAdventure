@@ -1,0 +1,82 @@
+{
+  "monster_training_box": {
+    "id": "monster_training_box",
+    "monster_template_id": "monster_training_box",
+    "module_id": "monster_system",
+    "name": "Training Box",
+    "nameKo": "훈련용 박스",
+    "level": 1,
+    "stats": {
+      "HP": 45,
+      "maxHP": 45,
+      "MP": 0,
+      "STR": 4,
+      "AGI": 5,
+      "INT": 1,
+      "DEF": 1,
+      "ATK": 4,
+      "EVASION": 0,
+      "ACCURACY": 80,
+      "CRIT_RATE": 0,
+      "CRIT_DMG": 150
+    },
+    "aiBehavior": "PASSIVE",
+    "chaseRange": 120,
+    "attackRange": 36,
+    "attackSpeed": 1400,
+    "drops": [
+      {
+        "itemId": "material_core_001",
+        "chance": 0.45
+      }
+    ],
+    "expReward": 12,
+    "goldReward": {
+      "min": 1,
+      "max": 4
+    },
+    "spriteKey": "monster_box"
+  },
+  "monster_aggressive_box": {
+    "id": "monster_aggressive_box",
+    "monster_template_id": "monster_aggressive_box",
+    "module_id": "monster_system",
+    "name": "Aggressive Box",
+    "nameKo": "공격형 박스",
+    "level": 3,
+    "stats": {
+      "HP": 95,
+      "maxHP": 95,
+      "MP": 0,
+      "STR": 8,
+      "AGI": 8,
+      "INT": 1,
+      "DEF": 3,
+      "ATK": 9,
+      "EVASION": 3,
+      "ACCURACY": 82,
+      "CRIT_RATE": 2,
+      "CRIT_DMG": 150
+    },
+    "aiBehavior": "AGGRESSIVE",
+    "chaseRange": 150,
+    "attackRange": 38,
+    "attackSpeed": 1200,
+    "drops": [
+      {
+        "itemId": "consumable_hp_001",
+        "chance": 0.25
+      },
+      {
+        "itemId": "material_core_001",
+        "chance": 0.55
+      }
+    ],
+    "expReward": 28,
+    "goldReward": {
+      "min": 4,
+      "max": 12
+    },
+    "spriteKey": "monster_box_aggressive"
+  }
+}

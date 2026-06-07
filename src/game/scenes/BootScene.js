@@ -16,97 +16,108 @@ export default class BootScene extends Phaser.Scene {
   }
 
   preload() {
-    // ======================================================================
-    // Load character spritesheets (64x64 frames)
-    // ======================================================================
-    const charAnims = ['Idle', 'Walk', 'Slice', 'Hit', 'Death', 'Run'];
-    const charDirs = ['Down', 'Side', 'Up'];
-    for (const anim of charAnims) {
-      for (const dir of charDirs) {
-        const key = `char_${anim.toLowerCase()}_${dir.toLowerCase()}`;
-        this.load.spritesheet(key, `assets/char/${anim}_${dir}.png`, {
-          frameWidth: 64,
-          frameHeight: 64,
-        });
-      }
-    }
-
-    // ======================================================================
-    // Load mob spritesheets (32x32 frames, 4 frames each)
-    // ======================================================================
-    const mobTypes = [
-      'Orc',
-      'Orc___Warrior',
-      'Orc___Shaman',
-      'Orc___Rogue',
-      'Skeleton___Base',
-      'Skeleton___Warrior',
-      'Skeleton___Mage',
-      'Skeleton___Rogue',
-    ];
-    const mobAnims = ['Idle', 'Run', 'Death'];
-    for (const mob of mobTypes) {
-      for (const anim of mobAnims) {
-        // Convert filename like "Orc___Warrior" to key "orc_warrior"
-        const key = `${mob.toLowerCase().replace(/___/g, '_')}_${anim.toLowerCase()}`;
-        this.load.spritesheet(key, `assets/mobs/${mob}_${anim}.png`, {
-          frameWidth: 32,
-          frameHeight: 32,
-        });
-      }
-    }
+    // Sprite reset: do not load external character or monster assets.
+    // All actors are generated as simple box textures in create().
   }
 
   create() {
-    // ======================================================================
-    // Create player animations from loaded spritesheets
-    // ======================================================================
-    this._createPlayerAnimations();
-
-    // ======================================================================
-    // Create monster animations from loaded spritesheets
-    // ======================================================================
-    this._createMonsterAnimations();
-
-    // ======================================================================
-    // Create a static 'player_base' texture from the first frame of idle_down
-    // so existing code that references 'player_base' doesn't break
-    // ======================================================================
-    if (this.textures.exists('char_idle_down')) {
-      const srcTexture = this.textures.get('char_idle_down');
-      const srcFrame = srcTexture.get(0);
-      const canvas = document.createElement('canvas');
-      canvas.width = 64;
-      canvas.height = 64;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(
-        srcFrame.source.image,
-        srcFrame.cutX, srcFrame.cutY, srcFrame.cutWidth, srcFrame.cutHeight,
-        0, 0, 64, 64
-      );
-      this.textures.addCanvas('player_base', canvas);
-    } else {
-      // Fallback: generate programmatically
-      this._generatePlayerBase();
-    }
-
-    // ======================================================================
-    // Generate programmatic textures for everything NOT covered by assets
-    // ======================================================================
-    this._generateEquipmentLayers();
-    this._generateMonsterSprites();   // kept as fallback textures
+    this._generateBoxSprites();
     this._generateTileTextures();
     this._generateItemIcons();
     this._generateUIElements();
     this._generateImpactEffects();
     this._generateItemPickup();
-    this._generateNPCSprites();
     this._generatePortalTexture();
 
-    // Load custom sprites from localStorage (overrides defaults)
-    CustomSpriteLoader.loadIntoScene(this).then(() => {
+    // Keep generated box actors as defaults, while allowing admin-managed
+    // skill/effect sprites to be loaded from localStorage.
+    CustomSpriteLoader.loadIntoScene(this, {
+      allowKey: (key, data) => {
+        if (/^(monster_|mon_|npc_)/.test(key)) return false;
+        if (key === 'player_base' && !data?.category) return false;
+        return true;
+      },
+    }).then(() => {
+      this._createBoxAnimations();
       this.scene.start('PreloadScene');
     });
+  }
+
+  _generateBoxSprites() {
+    const makeBox = (key, fill, edge, label) => {
+      this._genTex(key, CHAR_SIZE, CHAR_SIZE, (g) => {
+        g.fillStyle(0x000000, 0.25);
+        g.fillRect(14, 52, 36, 6);
+        g.fillStyle(fill, 1);
+        g.fillRect(16, 16, 32, 32);
+        g.lineStyle(3, edge, 1);
+        g.strokeRect(16, 16, 32, 32);
+        g.fillStyle(0xffffff, 0.9);
+        g.fillRect(24, 28, 6, 6);
+        g.fillRect(34, 28, 6, 6);
+        g.fillStyle(edge, 1);
+        g.fillRect(25, 29, 3, 3);
+        g.fillRect(35, 29, 3, 3);
+        g.fillStyle(0x111827, 1);
+        g.fillRect(26, 40, 12, 3);
+      });
+    };
+
+    makeBox('player_base', 0x2563eb, 0x93c5fd, 'P');
+    makeBox('player_box', 0x2563eb, 0x93c5fd, 'P');
+    makeBox('monster_box', 0xdc2626, 0xfca5a5, 'M');
+    makeBox('monster_box_aggressive', 0x7f1d1d, 0xf97316, 'A');
+    makeBox('npc_box', 0x16a34a, 0x86efac, 'N');
+
+    const npcKeys = ['npc_elder', 'npc_blacksmith', 'npc_merchant', 'npc_guard', 'npc_herbalist'];
+    for (const key of npcKeys) {
+      this._genTex(key, CHAR_SIZE, CHAR_SIZE, (g) => {
+        g.fillStyle(0x000000, 0.25);
+        g.fillRect(14, 52, 36, 6);
+        g.fillStyle(0x16a34a, 1);
+        g.fillRect(16, 16, 32, 32);
+        g.lineStyle(3, 0x86efac, 1);
+        g.strokeRect(16, 16, 32, 32);
+        g.fillStyle(0xffffff, 1);
+        g.fillRect(25, 29, 5, 5);
+        g.fillRect(34, 29, 5, 5);
+        g.fillRect(27, 40, 10, 3);
+      });
+    }
+  }
+
+  _createBoxAnimations() {
+    for (const dir of ['down', 'side', 'up']) {
+      for (const action of ['idle', 'walk', 'run', 'attack', 'hit', 'death']) {
+        const key = `player_${action}_${dir}`;
+        if (!this.anims.exists(key)) {
+          const textureKey = this.textures.exists(key) ? key : 'player_base';
+          const frameCount = this.textures.exists(key) ? Math.max(1, this.textures.get(key).frameTotal - 1) : 1;
+          this.anims.create({
+            key,
+            frames: textureKey === key
+              ? this.anims.generateFrameNumbers(key, { start: 0, end: Math.max(0, frameCount - 1) })
+              : [{ key: 'player_base' }],
+            frameRate: textureKey === key ? 6 : 1,
+            repeat: action === 'idle' || action === 'walk' || action === 'run' ? -1 : 0,
+          });
+        }
+      }
+    }
+
+    for (const base of ['monster_box', 'monster_box_aggressive']) {
+      for (const action of ['idle', 'run', 'death']) {
+        const key = `${base}_${action}_anim`;
+        if (!this.anims.exists(key)) {
+          this.anims.create({
+            key,
+            frames: [{ key: base }],
+            frameRate: 1,
+            repeat: action === 'death' ? 0 : -1,
+          });
+        }
+      }
+    }
   }
 
   // ==========================================================================
@@ -942,47 +953,175 @@ export default class BootScene extends Phaser.Scene {
   // ==========================================================================
 
   _generateItemIcons() {
+    // --- Weapon type icons ---
+    // 검 (Sword) - straight double-edged blade
     this._genTex('icon_sword', ICON_SIZE, ICON_SIZE, (g) => {
-      g.fillStyle(0xccccdd);
-      g.fillRect(7, 1, 2, 9);
-      g.fillStyle(0xddddee);
-      g.fillRect(7, 0, 2, 2);
-      g.fillStyle(0xcc9933);
-      g.fillRect(5, 10, 6, 2);
-      g.fillStyle(0x664422);
-      g.fillRect(7, 12, 2, 3);
-      g.fillStyle(0xcc9933);
-      g.fillRect(7, 15, 2, 1);
+      g.fillStyle(0xccccdd); g.fillRect(7, 1, 2, 9);
+      g.fillStyle(0xddddee); g.fillRect(7, 0, 2, 2);
+      g.fillStyle(0xcc9933); g.fillRect(5, 10, 6, 2);
+      g.fillStyle(0x664422); g.fillRect(7, 12, 2, 3);
+      g.fillStyle(0xcc9933); g.fillRect(7, 15, 2, 1);
     });
-
+    // 도 (Blade) - curved single-edge
+    this._genTex('icon_blade', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0xccccdd); g.fillRect(8, 1, 2, 8);
+      g.fillStyle(0xddddee); g.fillRect(9, 0, 2, 3);
+      g.fillStyle(0xaaaacc); g.fillRect(7, 3, 1, 5);
+      g.fillStyle(0xcc9933); g.fillRect(5, 9, 6, 2);
+      g.fillStyle(0x664422); g.fillRect(7, 11, 2, 4);
+    });
+    // 창 (Spear) - long pole with pointed tip
+    this._genTex('icon_spear', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0x886644); g.fillRect(7, 4, 2, 12);
+      g.fillStyle(0xccccdd); g.fillRect(6, 0, 4, 5);
+      g.fillStyle(0xddddee); g.fillRect(7, 0, 2, 2);
+    });
+    // 봉 (Staff) - wooden staff with orb
     this._genTex('icon_staff', ICON_SIZE, ICON_SIZE, (g) => {
-      g.fillStyle(0x886644);
-      g.fillRect(7, 2, 2, 13);
-      g.fillStyle(0x4488ff);
-      g.fillRect(6, 0, 4, 4);
-      g.fillStyle(0x66aaff);
-      g.fillRect(7, 1, 2, 2);
+      g.fillStyle(0x886644); g.fillRect(7, 2, 2, 13);
+      g.fillStyle(0x4488ff); g.fillRect(6, 0, 4, 4);
+      g.fillStyle(0x66aaff); g.fillRect(7, 1, 2, 2);
+    });
+    // 암기 (Hidden weapon) - small throwing stars
+    this._genTex('icon_hidden', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0xaaaacc); g.fillRect(7, 3, 2, 2);
+      g.fillRect(5, 5, 2, 2); g.fillRect(9, 5, 2, 2);
+      g.fillRect(7, 7, 2, 2); g.fillRect(5, 1, 2, 2);
+      g.fillRect(9, 1, 2, 2);
+      g.fillStyle(0xccccdd); g.fillRect(6, 4, 4, 1); g.fillRect(7, 3, 2, 4);
+    });
+    // 편 (Whip) - curved chain
+    this._genTex('icon_whip', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0x886644); g.fillRect(7, 10, 2, 5);
+      g.fillStyle(0xaaaacc);
+      g.fillRect(6, 8, 2, 3); g.fillRect(5, 6, 2, 3);
+      g.fillRect(4, 4, 2, 3); g.fillRect(5, 2, 2, 3);
+      g.fillRect(7, 1, 2, 2); g.fillRect(9, 0, 2, 2);
+    });
+    // 권 (Fist) - gauntlet
+    this._genTex('icon_fist', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0xcc9944); g.fillRect(4, 4, 8, 8);
+      g.fillStyle(0xddaa55); g.fillRect(5, 5, 6, 3);
+      g.fillStyle(0xaaaacc);
+      g.fillRect(4, 3, 2, 2); g.fillRect(6, 2, 2, 2);
+      g.fillRect(8, 2, 2, 2); g.fillRect(10, 3, 2, 2);
+    });
+    // 기문병기 (Exotic) - fan shape
+    this._genTex('icon_exotic', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0xddccaa);
+      g.fillRect(4, 2, 8, 8);
+      g.fillStyle(0xeeddbb); g.fillRect(5, 3, 6, 6);
+      g.fillStyle(0xcc9933); g.fillRect(7, 8, 2, 6);
+      g.fillStyle(0x4488aa); g.fillRect(6, 4, 4, 3);
     });
 
+    // --- Armor slot icons ---
+    // 갑옷 (Armor/chest)
     this._genTex('icon_armor', ICON_SIZE, ICON_SIZE, (g) => {
-      g.fillStyle(0x888899);
-      g.fillRect(4, 4, 8, 10);
-      g.fillStyle(0x999aaa);
-      g.fillRect(5, 3, 6, 2);
-      g.fillStyle(0x777788);
-      g.fillRect(2, 5, 3, 6);
-      g.fillRect(11, 5, 3, 6);
+      g.fillStyle(0x888899); g.fillRect(4, 4, 8, 10);
+      g.fillStyle(0x999aaa); g.fillRect(5, 3, 6, 2);
+      g.fillStyle(0x777788); g.fillRect(2, 5, 3, 6); g.fillRect(11, 5, 3, 6);
+    });
+    // 투구 (Helmet)
+    this._genTex('icon_helmet', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0x888899); g.fillRect(4, 4, 8, 8);
+      g.fillStyle(0x999aaa); g.fillRect(3, 6, 10, 4);
+      g.fillStyle(0xaaaabb); g.fillRect(5, 2, 6, 4);
+      g.fillStyle(0x666677); g.fillRect(5, 10, 6, 2);
+    });
+    // 하의 (Pants)
+    this._genTex('icon_pants', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0x667788); g.fillRect(4, 2, 8, 6);
+      g.fillRect(4, 8, 4, 6); g.fillRect(8, 8, 4, 6);
+      g.fillStyle(0x778899); g.fillRect(5, 3, 6, 4);
+    });
+    // 신발 (Shoes)
+    this._genTex('icon_shoes', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0x664422); g.fillRect(3, 8, 5, 4); g.fillRect(8, 8, 5, 4);
+      g.fillStyle(0x886644); g.fillRect(3, 6, 4, 3); g.fillRect(9, 6, 4, 3);
+      g.fillStyle(0x553311); g.fillRect(2, 11, 5, 2); g.fillRect(9, 11, 5, 2);
+    });
+    // 장갑 (Gloves)
+    this._genTex('icon_gloves', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0x886644); g.fillRect(4, 5, 8, 8);
+      g.fillStyle(0xaa8866); g.fillRect(5, 3, 2, 3); g.fillRect(7, 2, 2, 4); g.fillRect(9, 3, 2, 3);
+      g.fillStyle(0x775533); g.fillRect(3, 6, 2, 5);
+    });
+    // 허리띠 (Belt)
+    this._genTex('icon_belt', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0x664422); g.fillRect(2, 6, 12, 4);
+      g.fillStyle(0xcc9933); g.fillRect(6, 5, 4, 6);
+      g.fillStyle(0xddaa44); g.fillRect(7, 6, 2, 4);
+    });
+    // 방패 (Shield)
+    this._genTex('icon_shield', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0x888899); g.fillRect(4, 2, 8, 10);
+      g.fillStyle(0x999aaa); g.fillRect(5, 3, 6, 8);
+      g.fillStyle(0xcc9933); g.fillRect(6, 5, 4, 4);
+      g.fillStyle(0x777788); g.fillRect(7, 12, 2, 2);
     });
 
-    this._genTex('icon_potion', ICON_SIZE, ICON_SIZE, (g) => {
+    // --- Accessory icons ---
+    // 반지 (Ring)
+    this._genTex('icon_ring', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0xccaa33); g.fillRect(5, 4, 6, 8);
+      g.fillStyle(0x000000, 0); g.fillRect(6, 5, 4, 6);
+      g.fillStyle(0x111111); g.fillRect(6, 5, 4, 6);
+      g.fillStyle(0xccaa33); g.fillRect(5, 4, 6, 1); g.fillRect(5, 11, 6, 1);
+      g.fillRect(5, 4, 1, 8); g.fillRect(10, 4, 1, 8);
+      g.fillStyle(0x44aaff); g.fillRect(6, 3, 4, 2);
+    });
+    // 목걸이 (Necklace)
+    this._genTex('icon_necklace', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0xccaa33);
+      g.fillRect(5, 2, 1, 6); g.fillRect(10, 2, 1, 6);
+      g.fillRect(5, 2, 6, 1); g.fillRect(4, 7, 2, 2); g.fillRect(10, 7, 2, 2);
+      g.fillStyle(0xff4444); g.fillRect(6, 9, 4, 4);
+      g.fillStyle(0xff6666); g.fillRect(7, 10, 2, 2);
+    });
+    // 부적 (Talisman)
+    this._genTex('icon_talisman', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0xddcc88); g.fillRect(4, 2, 8, 12);
+      g.fillStyle(0xeedd99); g.fillRect(5, 3, 6, 10);
       g.fillStyle(0xcc3333);
-      g.fillRect(5, 6, 6, 8);
-      g.fillStyle(0x886644);
-      g.fillRect(6, 3, 4, 4);
-      g.fillStyle(0xaa8855);
-      g.fillRect(6, 2, 4, 2);
-      g.fillStyle(0xff5555);
-      g.fillRect(6, 8, 2, 4);
+      g.fillRect(6, 4, 4, 1); g.fillRect(7, 5, 2, 3);
+      g.fillRect(6, 8, 4, 1); g.fillRect(7, 9, 2, 2);
+    });
+    // 옥패 (Jade Token)
+    this._genTex('icon_jade', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0x44aa66); g.fillRect(4, 3, 8, 10);
+      g.fillStyle(0x55cc77); g.fillRect(5, 4, 6, 8);
+      g.fillStyle(0x338855); g.fillRect(7, 1, 2, 3);
+      g.fillStyle(0xccaa33); g.fillRect(6, 1, 4, 1);
+    });
+
+    // --- Consumable icons ---
+    // 체력 물약 (HP Potion) - red
+    this._genTex('icon_potion', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0xcc3333); g.fillRect(5, 6, 6, 8);
+      g.fillStyle(0x886644); g.fillRect(6, 3, 4, 4);
+      g.fillStyle(0xaa8855); g.fillRect(6, 2, 4, 2);
+      g.fillStyle(0xff5555); g.fillRect(6, 8, 2, 4);
+    });
+    // 내력 물약 (MP Potion) - blue
+    this._genTex('icon_potion_mp', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0x3355cc); g.fillRect(5, 6, 6, 8);
+      g.fillStyle(0x886644); g.fillRect(6, 3, 4, 4);
+      g.fillStyle(0xaa8855); g.fillRect(6, 2, 4, 2);
+      g.fillStyle(0x5577ff); g.fillRect(6, 8, 2, 4);
+    });
+    // 해독제 (Antidote) - green
+    this._genTex('icon_potion_cure', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0x33aa55); g.fillRect(5, 6, 6, 8);
+      g.fillStyle(0x886644); g.fillRect(6, 3, 4, 4);
+      g.fillStyle(0xaa8855); g.fillRect(6, 2, 4, 2);
+      g.fillStyle(0x55cc77); g.fillRect(6, 8, 2, 4);
+    });
+    // 기타 재료 (Material)
+    this._genTex('icon_material', ICON_SIZE, ICON_SIZE, (g) => {
+      g.fillStyle(0x88aa66); g.fillRect(4, 6, 8, 6);
+      g.fillStyle(0xaacc88); g.fillRect(5, 4, 6, 3);
+      g.fillStyle(0x667744); g.fillRect(7, 2, 2, 3);
     });
   }
 

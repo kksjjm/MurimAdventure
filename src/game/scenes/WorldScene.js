@@ -11,7 +11,8 @@ import SkillCombinationSystem from '../systems/SkillCombinationSystem.js';
 import ImpactSystem from '../systems/ImpactSystem.js';
 import MapTransitionSystem from '../systems/MapTransitionSystem.js';
 import { getMapData } from '../data/mapData.js';
-import { MONSTERS_BY_ID, ITEMS_BY_ID, SPAWN_CONFIG } from '../../data/defaultData.js';
+import { getGameData } from '../../data/GameDataLoader.js';
+import { spawnItemPickup, onItemPickup } from '../systems/ItemPickupSystem.js';
 
 const TILE_SIZE = 32;
 const MAP_W = 50;
@@ -134,7 +135,7 @@ export default class WorldScene extends Phaser.Scene {
 
     // --- Respawn timer ---
     this.time.addEvent({
-      delay: SPAWN_CONFIG.default.respawnTime || 15000,
+      delay: getGameData().spawnConfig.default.respawnTime || 15000,
       callback: this._respawnMonsters,
       callbackScope: this,
       loop: true,
@@ -149,6 +150,11 @@ export default class WorldScene extends Phaser.Scene {
   // ==========================================================================
 
   _generateMap() {
+    const mapMeta = getMapData(this.mapId);
+    if (mapMeta?.tiles && Array.isArray(mapMeta.tiles)) {
+      return mapMeta.tiles.map(row => [...row]);
+    }
+
     const map = [];
     for (let y = 0; y < MAP_H; y++) {
       const row = [];
@@ -197,9 +203,9 @@ export default class WorldScene extends Phaser.Scene {
     }
 
     // Clear portal areas so they're accessible
-    const mapMeta = getMapData('field_01');
-    if (mapMeta && mapMeta.portals) {
-      for (const portal of mapMeta.portals) {
+    const portalMapMeta = getMapData('field_01');
+    if (portalMapMeta && portalMapMeta.portals) {
+      for (const portal of portalMapMeta.portals) {
         for (let dy = -2; dy <= 2; dy++) {
           for (let dx = -2; dx <= 2; dx++) {
             const py = portal.y + dy;
@@ -252,12 +258,12 @@ export default class WorldScene extends Phaser.Scene {
   // ==========================================================================
 
   _spawnMonsters() {
-    const config = SPAWN_CONFIG.default;
+    const config = getGameData().spawnConfig.default;
 
     for (let i = 0; i < config.monstersPerArea; i++) {
       const typeIdx = this._weightedRandom(config.weights);
       const monsterId = config.types[Math.min(typeIdx, config.types.length - 1)];
-      const monsterData = MONSTERS_BY_ID[monsterId];
+      const monsterData = getGameData().monsters[monsterId];
       if (!monsterData) continue;
 
       let sx, sy, tile;
@@ -281,14 +287,14 @@ export default class WorldScene extends Phaser.Scene {
 
   _respawnMonsters() {
     const aliveCount = this.monsters.getChildren().filter((m) => !m.isDead).length;
-    const config = SPAWN_CONFIG.default;
+    const config = getGameData().spawnConfig.default;
 
     if (aliveCount < config.monstersPerArea) {
       const toSpawn = Math.min(2, config.monstersPerArea - aliveCount);
       for (let i = 0; i < toSpawn; i++) {
         const typeIdx = this._weightedRandom(config.weights);
         const monsterId = config.types[Math.min(typeIdx, config.types.length - 1)];
-        const monsterData = MONSTERS_BY_ID[monsterId];
+        const monsterData = getGameData().monsters[monsterId];
         if (!monsterData) continue;
 
         let sx, sy, tile;
@@ -325,47 +331,11 @@ export default class WorldScene extends Phaser.Scene {
   // ==========================================================================
 
   spawnItemPickup(itemId, x, y) {
-    const pickup = this.physics.add.sprite(x, y, 'item_pickup');
-    pickup.setDepth(8);
-    pickup.setData('itemId', itemId);
-
-    this.tweens.add({
-      targets: pickup,
-      y: y - 5,
-      duration: 600,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
-
-    this.itemPickups.add(pickup);
-    return pickup;
+    return spawnItemPickup(this, this.itemPickups, itemId, x, y);
   }
 
   _onItemPickup(player, pickup) {
-    const itemId = pickup.getData('itemId');
-    if (itemId) {
-      player.addItem(itemId, 1);
-
-      const itemData = ITEMS_BY_ID[itemId];
-      const name = itemData ? (itemData.nameKo || itemData.name) : itemId;
-      const text = this.add.text(pickup.x, pickup.y - 10, `획득: ${name}`, {
-        fontSize: '11px',
-        fontFamily: 'monospace',
-        color: '#66ff66',
-        stroke: '#000000',
-        strokeThickness: 2,
-      });
-      text.setOrigin(0.5, 1).setDepth(1000);
-      this.tweens.add({
-        targets: text,
-        y: pickup.y - 40,
-        alpha: 0,
-        duration: 1000,
-        onComplete: () => text.destroy(),
-      });
-    }
-    pickup.destroy();
+    onItemPickup(this, player, pickup);
   }
 
   // ==========================================================================

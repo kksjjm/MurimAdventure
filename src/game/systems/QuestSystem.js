@@ -119,7 +119,7 @@ export default class QuestSystem {
 
   /**
    * Record a kill for quest tracking.
-   * @param {string} monsterId - The killed monster's ID (e.g. 'mon_wild_boar')
+   * @param {string} monsterId - The killed monster's ID (e.g. 'monster_training_box')
    */
   onMonsterKilled(monsterId) {
     for (const quest of this.activeQuests) {

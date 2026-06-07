@@ -1,124 +1,104 @@
 // =============================================================================
-// npcData.js - NPC definitions for Murim Adventure village
+// npcData.js - NPC definitions for the modular ARPG test village
 // =============================================================================
 
 export const NPC_LIST = Object.freeze([
   {
-    id: 'npc_village_elder',
-    nameKo: '촌장',
-    name: 'Village Elder',
+    id: 'npc_elder',
+    module_id: 'quest_system',
+    nameKo: '시스템 관리자',
+    name: 'System Admin',
     type: 'quest',
     texture: 'npc_elder',
     dialogues: {
       default: [
-        '어서 오게, 젊은 무인이여.',
-        '이 마을은 최근 짐승과 산적들로 인해 위험해지고 있다네.',
-        '자네가 도와줄 수 있겠는가?',
+        '모두의 RPG 테스트 빌드에 오신 것을 환영합니다.',
+        '이 마을은 모듈, 템플릿, 전투 판정을 검증하는 샌드박스입니다.',
       ],
       quest_available: [
-        '마을 주변에 멧돼지들이 출몰하고 있네.',
-        '멧돼지 3마리를 처치해 주겠는가?',
+        '훈련용 박스 3개를 처치해서 기본 전투 판정을 확인해 주세요.',
       ],
       quest_complete: [
-        '고맙네! 덕분에 마을이 안전해졌구먼.',
-        '이것은 보답일세. 받아 주게.',
-      ],
-      quest_04_available: [
-        '대장장이에게 전할 말이 있네.',
-        '그에게 가서 새 검을 하나 받아 오게나.',
-      ],
-      quest_04_complete: [
-        '대장장이에게 다녀왔는가? 잘 했네.',
+        '좋습니다. 이제 전투 코어의 기본 흐름이 확인되었습니다.',
       ],
     },
-    quests: ['quest_01', 'quest_04'],
+    quests: ['quest_01'],
     shopType: null,
     position: { x: 12, y: 10 },
   },
-
   {
     id: 'npc_blacksmith',
-    nameKo: '대장장이',
-    name: 'Blacksmith',
+    module_id: 'equipment_system',
+    nameKo: '장비 관리자',
+    name: 'Equipment Admin',
     type: 'shop_weapon',
     texture: 'npc_blacksmith',
     dialogues: {
       default: [
-        '어서 와라! 좋은 무기가 많다.',
-        '무엇이 필요한가?',
+        '장비 템플릿과 무기 템플릿을 관리합니다.',
+        '현재는 프로토타입 장비만 판매합니다.',
       ],
-      shop: [
-        '마음에 드는 것이 있으면 말해라.',
-      ],
+      shop: ['장착 시 스탯 변화가 정상인지 확인해 보세요.'],
     },
-    quests: [],
+    quests: ['quest_04'],
     shopType: 'weapon',
     position: { x: 16, y: 8 },
   },
-
   {
     id: 'npc_merchant',
-    nameKo: '상인',
-    name: 'Merchant',
+    module_id: 'item_system',
+    nameKo: '아이템 관리자',
+    name: 'Item Admin',
     type: 'shop_general',
     texture: 'npc_merchant',
     dialogues: {
       default: [
-        '이히히, 손님이로군!',
-        '약초부터 장신구까지, 없는 게 없다네.',
+        '소비품, 재료, 템플릿/인스턴스 분리 흐름을 확인할 수 있습니다.',
       ],
-      shop: [
-        '천천히 둘러보시게나.',
-      ],
+      shop: ['소비품과 재료 샘플을 판매합니다.'],
     },
     quests: [],
     shopType: 'general',
     position: { x: 20, y: 10 },
   },
-
   {
     id: 'npc_guard',
-    nameKo: '경비병',
-    name: 'Guard',
+    module_id: 'monster_system',
+    nameKo: 'AI 관리자',
+    name: 'AI Admin',
     type: 'quest',
     texture: 'npc_guard',
     dialogues: {
       default: [
-        '무림의 치안을 지키는 것이 나의 임무다.',
-        '최근 산적들이 마을 근처까지 내려오고 있어 걱정이다.',
+        '몬스터 AI 템플릿과 전투 시뮬레이션을 담당합니다.',
       ],
       quest_available: [
-        '산적들이 마을 근처에 나타나고 있소.',
-        '산적 2명을 처치해 주시오. 사례는 충분히 하겠소.',
+        '공격형 박스 2개를 처치해서 추적/공격 AI를 확인해 주세요.',
       ],
       quest_complete: [
-        '산적들을 처치했소? 대단하오!',
-        '약속대로 보상을 드리겠소.',
+        'AI 검증이 완료되었습니다.',
       ],
     },
     quests: ['quest_02'],
     shopType: null,
     position: { x: 24, y: 12 },
   },
-
   {
     id: 'npc_herbalist',
-    nameKo: '약초꾼',
-    name: 'Herbalist',
+    module_id: 'crafting_system',
+    nameKo: '제작 관리자',
+    name: 'Craft Admin',
     type: 'quest',
-    texture: 'npc_merchant',
+    texture: 'npc_herbalist',
     dialogues: {
       default: [
-        '산에서 좋은 약초를 찾고 있다네.',
-        '혹시 약초를 구해올 수 있겠는가?',
+        '제작/강화 모듈은 아직 기본 비활성 상태입니다.',
       ],
       quest_available: [
-        '이 근처 숲에서 약초 3개를 채집해 주게.',
-        '보답으로 회복약을 넉넉히 주겠네.',
+        '코어 조각 3개를 수집해서 재료 흐름을 확인해 주세요.',
       ],
       quest_complete: [
-        '오! 이 약초들이면 충분하겠구먼.',
-        '약속대로 회복약을 주겠네. 고맙네!',
+        '재료 데이터 흐름이 확인되었습니다.',
       ],
     },
     quests: ['quest_03'],
@@ -127,9 +107,6 @@ export const NPC_LIST = Object.freeze([
   },
 ]);
 
-/**
- * Quick lookup map by NPC id
- */
 export const NPC_BY_ID = Object.freeze(
-  Object.fromEntries(NPC_LIST.map(npc => [npc.id, npc]))
+  Object.fromEntries(NPC_LIST.map((npc) => [npc.id, npc]))
 );

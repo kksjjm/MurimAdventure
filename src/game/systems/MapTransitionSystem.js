@@ -22,13 +22,15 @@ export default class MapTransitionSystem {
    * @param {number} targetY - Tile Y to spawn at in the target map
    */
   static transition(currentScene, targetMapId, targetX, targetY) {
-    if (currentScene._transitioning) return;
+    if (currentScene._mapTransitionInProgress) return;
+    currentScene._mapTransitionInProgress = true;
     currentScene._transitioning = true;
 
     const targetSceneKey = MAP_TO_SCENE[targetMapId];
     if (!targetSceneKey) {
       console.warn(`[MapTransition] Unknown map ID: ${targetMapId}`);
       currentScene._transitioning = false;
+      currentScene._mapTransitionInProgress = false;
       return;
     }
 
@@ -36,6 +38,7 @@ export default class MapTransitionSystem {
     if (!mapData) {
       console.warn(`[MapTransition] No map data for: ${targetMapId}`);
       currentScene._transitioning = false;
+      currentScene._mapTransitionInProgress = false;
       return;
     }
 

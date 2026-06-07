@@ -5,6 +5,7 @@
 import { DataManager } from './components/DataManager.js';
 import { ItemEditor } from './editors/ItemEditor.js';
 import { SkillEditor } from './editors/SkillEditor.js';
+import { CharacterEditor } from './editors/CharacterEditor.js';
 import { MonsterEditor } from './editors/MonsterEditor.js';
 import { MapEditor } from './editors/MapEditor.js';
 import { QuestEditor } from './editors/QuestEditor.js';
@@ -23,6 +24,43 @@ window.showToast = function(message, type = 'info') {
   container.appendChild(toast);
   setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
 };
+
+// ---- Mojibake repair helper ----
+// Some legacy admin strings were saved as UTF-8 bytes decoded through a
+// single-byte code page. Repair only strings that clearly match that pattern.
+function repairMojibake(text) {
+  if (typeof text !== 'string' || !/[ÃÂÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßà-ÿ]/.test(text)) {
+    return text;
+  }
+  try {
+    return decodeURIComponent(escape(text));
+  } catch {
+    return text;
+  }
+}
+
+function repairRenderedKorean(root) {
+  if (!root) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach((node) => {
+    const fixed = repairMojibake(node.nodeValue);
+    if (fixed !== node.nodeValue) node.nodeValue = fixed;
+  });
+
+  root.querySelectorAll('input, textarea, option, button, label, h1, h2, h3, h4, span, div, p, td, th').forEach((el) => {
+    for (const attr of ['title', 'placeholder', 'value']) {
+      if (!el.hasAttribute?.(attr)) continue;
+      const value = el.getAttribute(attr);
+      const fixed = repairMojibake(value);
+      if (fixed !== value) {
+        el.setAttribute(attr, fixed);
+        if (attr === 'value' && 'value' in el) el.value = fixed;
+      }
+    }
+  });
+}
 
 // ---- Admin App ----
 class AdminApp {
@@ -45,6 +83,7 @@ class AdminApp {
     this.editors = {
       items: new ItemEditor(this.dataManager),
       skills: new SkillEditor(this.dataManager),
+      character: new CharacterEditor(this.dataManager),
       monsters: new MonsterEditor(this.dataManager),
       maps: new MapEditor(this.dataManager),
       sprites: new SpriteEditor(this.dataManager),
@@ -85,6 +124,7 @@ class AdminApp {
     } else if (this.editors[section]) {
       this.editors[section].render(sectionEl);
     }
+    repairRenderedKorean(sectionEl);
   }
 
   renderDashboard() {
@@ -137,6 +177,7 @@ class AdminApp {
         </div>
       </div>
     `;
+    repairRenderedKorean(container);
   }
 
   updateVersionBadge() {

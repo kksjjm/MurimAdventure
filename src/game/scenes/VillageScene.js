@@ -271,11 +271,11 @@ export default class VillageScene extends Phaser.Scene {
 
   _getNPCDisplayName(npcId) {
     const names = {
-      npc_elder: '촌장 어른',
-      npc_blacksmith: '대장장이',
-      npc_merchant: '상인',
-      npc_guard: '경비병',
-      npc_herbalist: '약초꾼',
+      npc_elder: '시스템 관리자',
+      npc_blacksmith: '장비 관리자',
+      npc_merchant: '아이템 관리자',
+      npc_guard: 'AI 관리자',
+      npc_herbalist: '제작 관리자',
     };
     return names[npcId] || npcId;
   }
@@ -302,11 +302,11 @@ export default class VillageScene extends Phaser.Scene {
 
     // Show interaction bubble
     const dialogTexts = {
-      npc_elder: '환영하네, 젊은이. 이 무림촌에서 수련하고 강해지거라.',
-      npc_blacksmith: '무기가 필요한가? 좋은 검을 만들어 줄 수 있지.',
-      npc_merchant: '어서 오세요~ 여행에 필요한 물건이 있습니다.',
-      npc_guard: '마을 밖은 위험하니 조심하시오.',
-      npc_herbalist: '약초가 필요하시면 말씀하세요.',
+      npc_elder: '모듈형 ARPG 테스트 허브입니다. 전투와 데이터 흐름을 확인해 주세요.',
+      npc_blacksmith: '장비 템플릿과 장착 스탯 변화를 확인할 수 있습니다.',
+      npc_merchant: '소비품과 재료 템플릿 샘플을 판매합니다.',
+      npc_guard: '몬스터 AI와 전투 시뮬레이션을 검증합니다.',
+      npc_herbalist: '제작/강화 모듈은 기본 비활성 상태입니다.',
     };
 
     const text = dialogTexts[npc.npcId] || '...';

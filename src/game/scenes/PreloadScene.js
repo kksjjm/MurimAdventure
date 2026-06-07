@@ -3,10 +3,7 @@
 // =============================================================================
 
 import Phaser from 'phaser';
-import {
-  ITEMS_BY_ID, MONSTERS_BY_ID, SKILLS_BY_ID, DEFAULT_PLAYER_STATS,
-  DEFAULT_ITEMS, DEFAULT_MONSTERS, DEFAULT_SKILLS,
-} from '../../data/defaultData.js';
+import { loadGameData } from '../../data/GameDataLoader.js';
 
 export default class PreloadScene extends Phaser.Scene {
   constructor() {
@@ -20,7 +17,7 @@ export default class PreloadScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#0a0a1a');
 
     // --- Title ---
-    this.add.text(width / 2, height / 2 - 80, '무림기행', {
+    this.add.text(width / 2, height / 2 - 80, '모두의 RPG', {
       fontSize: '48px',
       fontFamily: 'serif',
       color: '#ffcc66',
@@ -28,7 +25,7 @@ export default class PreloadScene extends Phaser.Scene {
       strokeThickness: 4,
     }).setOrigin(0.5);
 
-    this.add.text(width / 2, height / 2 - 30, 'Murim Adventure', {
+    this.add.text(width / 2, height / 2 - 30, 'Realtime Modular ARPG', {
       fontSize: '18px',
       fontFamily: 'monospace',
       color: '#aaaacc',
@@ -48,7 +45,7 @@ export default class PreloadScene extends Phaser.Scene {
 
     const barFill = this.add.graphics();
 
-    const statusText = this.add.text(width / 2, barY + barHeight + 20, '게임 데이터 로딩 중...', {
+    const statusText = this.add.text(width / 2, barY + barHeight + 20, '새 기획 데이터 로딩 중...', {
       fontSize: '12px',
       fontFamily: 'monospace',
       color: '#888899',
@@ -56,21 +53,23 @@ export default class PreloadScene extends Phaser.Scene {
 
     // --- Simulate loading steps ---
     const steps = [
-      { text: '아이템 데이터 로딩...', progress: 0.2 },
-      { text: '몬스터 데이터 로딩...', progress: 0.4 },
-      { text: '무공 데이터 로딩...', progress: 0.6 },
-      { text: '게임 시스템 초기화...', progress: 0.8 },
+      { text: '모듈/테이블 설계 로딩...', progress: 0.2 },
+      { text: '아이템/몬스터 템플릿 로딩...', progress: 0.4 },
+      { text: '스킬/전투 액션 로딩...', progress: 0.6 },
+      { text: '박스 스프라이트 초기화...', progress: 0.8 },
       { text: '로딩 완료!', progress: 1.0 },
     ];
 
-    // Validate data is loaded
-    this._validateData();
+    // Load game data (admin localStorage → defaults fallback)
+    const gameData = loadGameData();
+    this._validateData(gameData);
 
     // Store data on registry for access across scenes
-    this.registry.set('items', ITEMS_BY_ID);
-    this.registry.set('monsters', MONSTERS_BY_ID);
-    this.registry.set('skills', SKILLS_BY_ID);
-    this.registry.set('playerDefaults', DEFAULT_PLAYER_STATS);
+    this.registry.set('items', gameData.items);
+    this.registry.set('monsters', gameData.monsters);
+    this.registry.set('skills', gameData.skills);
+    this.registry.set('playerDefaults', gameData.playerDefaults);
+    this.registry.set('gameData', gameData);
 
     let stepIndex = 0;
     const stepTimer = this.time.addEvent({
@@ -98,10 +97,10 @@ export default class PreloadScene extends Phaser.Scene {
     });
   }
 
-  _validateData() {
-    const itemCount = DEFAULT_ITEMS.length;
-    const monsterCount = DEFAULT_MONSTERS.length;
-    const skillCount = DEFAULT_SKILLS.length;
+  _validateData(gameData) {
+    const itemCount = Object.keys(gameData.items).length;
+    const monsterCount = Object.keys(gameData.monsters).length;
+    const skillCount = Object.keys(gameData.skills).length;
 
     console.log(`[PreloadScene] Loaded ${itemCount} items, ${monsterCount} monsters, ${skillCount} skills`);
 

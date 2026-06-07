@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
   <style>
     /* ================================================================
-       무림기행 Admin Panel - Dark Oriental Theme
+       臾대┝湲고뻾 Admin Panel - Dark Oriental Theme
        ================================================================ */
     :root {
       --bg-darkest: #0a0a0f;
@@ -368,7 +368,7 @@
 <body>
   <!-- Header -->
   <header class="admin-header">
-    <div class="logo">武林紀行 <span>관리자 패널</span></div>
+    <div class="logo">무림기행<span>관리자 패널</span></div>
     <div class="header-actions">
       <span class="version-badge" id="versionBadge">v0.1.0</span>
       <button class="btn btn-secondary btn-small" onclick="location.href='index.html'">게임으로 돌아가기</button>
@@ -378,19 +378,20 @@
   <!-- Sidebar -->
   <nav class="admin-sidebar" id="sidebar">
     <div class="sidebar-section-label">관리</div>
-    <div class="sidebar-item active" data-section="dashboard"><span class="icon">📊</span><span>대시보드</span></div>
-    <div class="sidebar-item" data-section="items"><span class="icon">🗡️</span><span>아이템 관리</span></div>
-    <div class="sidebar-item" data-section="skills"><span class="icon">⚡</span><span>스킬 관리</span></div>
-    <div class="sidebar-item" data-section="monsters"><span class="icon">👹</span><span>몬스터 관리</span></div>
-    <div class="sidebar-item" data-section="maps"><span class="icon">🗺️</span><span>맵 에디터</span></div>
-    <div class="sidebar-item" data-section="sprites"><span class="icon">🎨</span><span>스프라이트 관리</span></div>
-    <div class="sidebar-item" data-section="quests"><span class="icon">📜</span><span>퀘스트 관리</span></div>
+    <div class="sidebar-item active" data-section="dashboard"><span class="icon">DB</span><span>대시보드</span></div>
+    <div class="sidebar-item" data-section="items"><span class="icon">IT</span><span>아이템 관리</span></div>
+    <div class="sidebar-item" data-section="skills"><span class="icon">SK</span><span>스킬 관리</span></div>
+    <div class="sidebar-item" data-section="character"><span class="icon">PC</span><span>메인 캐릭터 관리</span></div>
+    <div class="sidebar-item" data-section="monsters"><span class="icon">MO</span><span>몬스터 관리</span></div>
+    <div class="sidebar-item" data-section="maps"><span class="icon">MP</span><span>맵 에디터</span></div>
+    <div class="sidebar-item" data-section="sprites"><span class="icon">SP</span><span>스프라이트 관리</span></div>
+    <div class="sidebar-item" data-section="quests"><span class="icon">QU</span><span>퀘스트 관리</span></div>
     <div class="sidebar-section-label">시스템</div>
-    <div class="sidebar-item" data-section="events"><span class="icon">🎉</span><span>이벤트 관리</span></div>
-    <div class="sidebar-item" data-section="mounts"><span class="icon">🐴</span><span>탈것/환수 관리</span></div>
-    <div class="sidebar-item" data-section="stats"><span class="icon">📈</span><span>능력치 설정</span></div>
-    <div class="sidebar-item" data-section="settings"><span class="icon">⚙️</span><span>게임 설정</span></div>
-    <div class="sidebar-item" data-section="data"><span class="icon">💾</span><span>데이터 관리</span></div>
+    <div class="sidebar-item" data-section="events"><span class="icon">EV</span><span>이벤트 관리</span></div>
+    <div class="sidebar-item" data-section="mounts"><span class="icon">PT</span><span>탈것/환수 관리</span></div>
+    <div class="sidebar-item" data-section="stats"><span class="icon">ST</span><span>능력치 설정</span></div>
+    <div class="sidebar-item" data-section="settings"><span class="icon">GS</span><span>게임 설정</span></div>
+    <div class="sidebar-item" data-section="data"><span class="icon">JS</span><span>데이터 관리</span></div>
   </nav>
 
   <!-- Main Content -->
@@ -398,6 +399,7 @@
     <div class="section active" id="section-dashboard"></div>
     <div class="section" id="section-items"></div>
     <div class="section" id="section-skills"></div>
+    <div class="section" id="section-character"></div>
     <div class="section" id="section-monsters"></div>
     <div class="section" id="section-maps"></div>
     <div class="section" id="section-sprites"></div>
@@ -408,7 +410,6 @@
     <div class="section" id="section-settings"></div>
     <div class="section" id="section-data"></div>
   </main>
-
   <!-- Toast container -->
   <div class="toast-container" id="toastContainer"></div>
 

@@ -1,0 +1,647 @@
+{
+  "schemaVersion": 2,
+  "playerDefaults": {
+    "level": 1,
+    "exp": 0,
+    "gold": 100,
+    "HP": 120,
+    "MP": 60,
+    "maxHP": 120,
+    "maxMP": 60,
+    "STR": 8,
+    "AGI": 8,
+    "INT": 8,
+    "LUK": 5,
+    "DEF": 3,
+    "ATK": 10,
+    "EVASION": 4,
+    "ACCURACY": 90,
+    "CRIT_RATE": 5,
+    "CRIT_DMG": 150,
+    "SPIRIT": 5,
+    "ITEM_FIND": 0,
+    "MOVE_SPEED": 160,
+    "ATK_SPEED": 100,
+    "HP_REGEN": 1,
+    "MP_REGEN": 1,
+    "DMG_BONUS": 0,
+    "DMG_TAKEN": 0
+  },
+  "levelUpGains": {
+    "maxHP": 12,
+    "maxMP": 6,
+    "STR": 1,
+    "AGI": 1,
+    "INT": 1,
+    "DEF": 1,
+    "ATK": 2
+  },
+  "defaultInventory": [
+    {
+      "itemId": "consumable_hp_001",
+      "quantity": 3
+    }
+  ],
+  "defaultStartingSkills": [
+    "skill_slash",
+    "skill_bolt",
+    "skill_recover_channel"
+  ],
+  "defaultSkillSlots": [
+    "skill_slash",
+    "skill_bolt",
+    "skill_recover_channel",
+    null,
+    null
+  ],
+  "systemModules": [
+    {
+      "module_id": "core",
+      "name": "코어",
+      "category": "core",
+      "enabled_default": true,
+      "fallback_policy": "block_publish",
+      "main_tables": [
+        "system_modules",
+        "assets",
+        "stat_definitions"
+      ]
+    },
+    {
+      "module_id": "admin_system",
+      "name": "관리자 시스템",
+      "category": "admin",
+      "enabled_default": true,
+      "dependencies": [
+        "core"
+      ],
+      "fallback_policy": "block_publish",
+      "main_tables": [
+        "admin_users",
+        "admin_audit_logs"
+      ]
+    },
+    {
+      "module_id": "race_system",
+      "name": "종족 시스템",
+      "category": "character",
+      "enabled_default": true,
+      "dependencies": [
+        "core"
+      ],
+      "fallback_policy": "use_default",
+      "main_tables": [
+        "race_templates"
+      ]
+    },
+    {
+      "module_id": "class_system",
+      "name": "직업 시스템",
+      "category": "character",
+      "enabled_default": true,
+      "dependencies": [
+        "core"
+      ],
+      "fallback_policy": "use_default",
+      "main_tables": [
+        "class_templates"
+      ]
+    },
+    {
+      "module_id": "item_system",
+      "name": "아이템 시스템",
+      "category": "item",
+      "enabled_default": true,
+      "dependencies": [
+        "core"
+      ],
+      "fallback_policy": "preserve_data_hide_ui",
+      "main_tables": [
+        "item_templates",
+        "item_instances"
+      ]
+    },
+    {
+      "module_id": "equipment_system",
+      "name": "장비 시스템",
+      "category": "item",
+      "enabled_default": true,
+      "dependencies": [
+        "item_system"
+      ],
+      "fallback_policy": "use_default",
+      "main_tables": [
+        "equipment_templates",
+        "weapon_templates"
+      ]
+    },
+    {
+      "module_id": "combat_core",
+      "name": "실시간 전투 코어",
+      "category": "combat",
+      "enabled_default": true,
+      "dependencies": [
+        "core"
+      ],
+      "fallback_policy": "block_publish",
+      "main_tables": [
+        "combat_action_templates",
+        "hitbox_templates",
+        "hurtbox_templates"
+      ]
+    },
+    {
+      "module_id": "skill_system",
+      "name": "스킬 시스템",
+      "category": "skill",
+      "enabled_default": true,
+      "dependencies": [
+        "combat_core"
+      ],
+      "fallback_policy": "disable_feature",
+      "main_tables": [
+        "skill_templates",
+        "effect_actions"
+      ]
+    },
+    {
+      "module_id": "monster_system",
+      "name": "몬스터/AI",
+      "category": "combat",
+      "enabled_default": true,
+      "dependencies": [
+        "combat_core"
+      ],
+      "fallback_policy": "disable_feature",
+      "main_tables": [
+        "monster_templates",
+        "ai_behavior_templates"
+      ]
+    },
+    {
+      "module_id": "quest_system",
+      "name": "퀘스트/NPC/대화",
+      "category": "world",
+      "enabled_default": true,
+      "dependencies": [
+        "core"
+      ],
+      "fallback_policy": "preserve_data_hide_ui",
+      "main_tables": [
+        "quest_templates",
+        "npc_templates",
+        "dialogue_nodes"
+      ]
+    },
+    {
+      "module_id": "crafting_system",
+      "name": "제작",
+      "category": "item",
+      "enabled_default": false,
+      "dependencies": [
+        "item_system"
+      ],
+      "fallback_policy": "disable_feature",
+      "main_tables": [
+        "crafting_recipes"
+      ]
+    },
+    {
+      "module_id": "enhance_system",
+      "name": "강화",
+      "category": "item",
+      "enabled_default": false,
+      "dependencies": [
+        "equipment_system"
+      ],
+      "fallback_policy": "disable_feature",
+      "main_tables": [
+        "equipment_enhance_rules"
+      ]
+    }
+  ],
+  "tableCatalog": [
+    {
+      "domain": "Core",
+      "table_name": "system_modules",
+      "pk": "module_id",
+      "module_id": "core",
+      "kind": "필수"
+    },
+    {
+      "domain": "Core",
+      "table_name": "assets",
+      "pk": "asset_id",
+      "module_id": "core",
+      "kind": "필수"
+    },
+    {
+      "domain": "Stats",
+      "table_name": "stat_definitions",
+      "pk": "stat_id",
+      "module_id": "core",
+      "kind": "필수"
+    },
+    {
+      "domain": "Items",
+      "table_name": "item_templates",
+      "pk": "item_template_id",
+      "module_id": "item_system",
+      "kind": "필수"
+    },
+    {
+      "domain": "Items",
+      "table_name": "item_instances",
+      "pk": "item_instance_id",
+      "module_id": "item_system",
+      "kind": "필수"
+    },
+    {
+      "domain": "Items",
+      "table_name": "equipment_templates",
+      "pk": "equipment_template_id",
+      "module_id": "equipment_system",
+      "kind": "필수"
+    },
+    {
+      "domain": "Items",
+      "table_name": "weapon_templates",
+      "pk": "weapon_template_id",
+      "module_id": "equipment_system",
+      "kind": "필수"
+    },
+    {
+      "domain": "Combat",
+      "table_name": "combat_action_templates",
+      "pk": "action_id",
+      "module_id": "combat_core",
+      "kind": "필수"
+    },
+    {
+      "domain": "Combat",
+      "table_name": "hitbox_templates",
+      "pk": "hitbox_id",
+      "module_id": "combat_core",
+      "kind": "필수"
+    },
+    {
+      "domain": "Combat",
+      "table_name": "hurtbox_templates",
+      "pk": "hurtbox_id",
+      "module_id": "combat_core",
+      "kind": "필수"
+    },
+    {
+      "domain": "Skills",
+      "table_name": "skill_templates",
+      "pk": "skill_template_id",
+      "module_id": "skill_system",
+      "kind": "필수"
+    },
+    {
+      "domain": "Skills",
+      "table_name": "effect_actions",
+      "pk": "effect_action_id",
+      "module_id": "skill_system",
+      "kind": "필수"
+    },
+    {
+      "domain": "Monster",
+      "table_name": "monster_templates",
+      "pk": "monster_template_id",
+      "module_id": "monster_system",
+      "kind": "필수"
+    },
+    {
+      "domain": "Monster",
+      "table_name": "ai_behavior_templates",
+      "pk": "ai_template_id",
+      "module_id": "monster_system",
+      "kind": "권장"
+    },
+    {
+      "domain": "Quest",
+      "table_name": "quest_templates",
+      "pk": "quest_template_id",
+      "module_id": "quest_system",
+      "kind": "권장"
+    }
+  ],
+  "statDefinitions": [
+    {
+      "stat_id": "current_hp",
+      "code": "current_hp",
+      "legacyKey": "HP",
+      "name": "현재 체력",
+      "value_type": "decimal",
+      "stack_rule": "override",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "current_mp",
+      "code": "current_mp",
+      "legacyKey": "MP",
+      "name": "현재 마나",
+      "value_type": "decimal",
+      "stack_rule": "override",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "max_hp",
+      "code": "max_hp",
+      "legacyKey": "maxHP",
+      "name": "최대 체력",
+      "value_type": "decimal",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "max_mp",
+      "code": "max_mp",
+      "legacyKey": "maxMP",
+      "name": "최대 마나",
+      "value_type": "decimal",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "strength",
+      "code": "strength",
+      "legacyKey": "STR",
+      "name": "힘",
+      "value_type": "decimal",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "agility",
+      "code": "agility",
+      "legacyKey": "AGI",
+      "name": "민첩",
+      "value_type": "decimal",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "intelligence",
+      "code": "intelligence",
+      "legacyKey": "INT",
+      "name": "지능",
+      "value_type": "decimal",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "luck",
+      "code": "luck",
+      "legacyKey": "LUK",
+      "name": "운",
+      "value_type": "decimal",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "defense",
+      "code": "defense",
+      "legacyKey": "DEF",
+      "name": "방어력",
+      "value_type": "decimal",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "attack",
+      "code": "attack",
+      "legacyKey": "ATK",
+      "name": "공격력",
+      "value_type": "decimal",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "evasion",
+      "code": "evasion",
+      "legacyKey": "EVASION",
+      "name": "회피",
+      "value_type": "decimal",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "accuracy",
+      "code": "accuracy",
+      "legacyKey": "ACCURACY",
+      "name": "명중",
+      "value_type": "decimal",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "critical_chance_pct",
+      "code": "critical_chance_pct",
+      "legacyKey": "CRIT_RATE",
+      "name": "치명 확률",
+      "value_type": "percent",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "critical_multiplier_pct",
+      "code": "critical_multiplier_pct",
+      "legacyKey": "CRIT_DMG",
+      "name": "치명 배율",
+      "value_type": "percent",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "spirit",
+      "code": "spirit",
+      "legacyKey": "SPIRIT",
+      "name": "정신력",
+      "value_type": "decimal",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "item_find_chance_pct",
+      "code": "item_find_chance_pct",
+      "legacyKey": "ITEM_FIND",
+      "name": "아이템 발견",
+      "value_type": "percent",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "move_speed",
+      "code": "move_speed",
+      "legacyKey": "MOVE_SPEED",
+      "name": "이동 속도",
+      "value_type": "decimal",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "attack_speed",
+      "code": "attack_speed",
+      "legacyKey": "ATK_SPEED",
+      "name": "공격 속도",
+      "value_type": "decimal",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "hp_regen_per_10s_pct",
+      "code": "hp_regen_per_10s_pct",
+      "legacyKey": "HP_REGEN",
+      "name": "체력 재생",
+      "value_type": "percent",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "mp_regen_per_10s_pct",
+      "code": "mp_regen_per_10s_pct",
+      "legacyKey": "MP_REGEN",
+      "name": "마나 재생",
+      "value_type": "percent",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "damage_increase_pct",
+      "code": "damage_increase_pct",
+      "legacyKey": "DMG_BONUS",
+      "name": "주는 피해 증가",
+      "value_type": "percent",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    },
+    {
+      "stat_id": "received_damage_delta_pct",
+      "code": "received_damage_delta_pct",
+      "legacyKey": "DMG_TAKEN",
+      "name": "받는 피해 변화",
+      "value_type": "percent",
+      "stack_rule": "add",
+      "module_id": "core",
+      "admin_editable": true
+    }
+  ],
+  "combatActions": [
+    {
+      "id": "action_basic_slash",
+      "name": "기본 베기",
+      "module_id": "combat_core",
+      "startup_ms": 120,
+      "active_ms": 100,
+      "recovery_ms": 260,
+      "can_cancel_into_json": [
+        "dash"
+      ],
+      "hitbox_id": "hitbox_slash_small"
+    },
+    {
+      "id": "action_projectile_shot",
+      "name": "기본 투사체",
+      "module_id": "combat_core",
+      "startup_ms": 160,
+      "active_ms": 80,
+      "recovery_ms": 300,
+      "projectile_template_id": "projectile_basic_bolt",
+      "hitbox_id": "hitbox_projectile_small"
+    }
+  ],
+  "hitboxTemplates": [
+    {
+      "id": "hitbox_slash_small",
+      "shape_type": "rect",
+      "offset_x": 0.8,
+      "offset_y": 0,
+      "width": 1.4,
+      "height": 0.7,
+      "duration_ms": 100
+    },
+    {
+      "id": "hitbox_projectile_small",
+      "shape_type": "circle",
+      "offset_x": 0,
+      "offset_y": 0,
+      "radius": 0.35,
+      "duration_ms": 80
+    },
+    {
+      "id": "hitbox_area_pulse",
+      "shape_type": "circle",
+      "offset_x": 0,
+      "offset_y": 0,
+      "radius": 2.4,
+      "duration_ms": 600
+    }
+  ],
+  "formulas": [
+    {
+      "id": "physical_damage_received",
+      "name": "받는 물리 피해",
+      "expression": "max(1,(incoming_damage-defense)*(1-physical_resist_pct)*(1+received_physical_damage_delta_pct))",
+      "module_id": "combat_core"
+    },
+    {
+      "id": "magic_damage_received",
+      "name": "받는 마법 피해",
+      "expression": "max(1,incoming_damage*(1-magic_resist_pct)*(1+received_magic_damage_delta_pct))",
+      "module_id": "combat_core"
+    },
+    {
+      "id": "outgoing_damage",
+      "name": "주는 피해",
+      "expression": "random(min_attack,max_attack)*(1+damage_increase_pct)*skill_multiplier",
+      "module_id": "combat_core"
+    },
+    {
+      "id": "critical_damage",
+      "name": "크리티컬 피해",
+      "expression": "outgoing_damage*(1+critical_multiplier_pct)",
+      "module_id": "combat_core"
+    },
+    {
+      "id": "hp_regen_tick",
+      "name": "체력 리젠",
+      "expression": "max_hp*hp_regen_per_10s_pct*(tick_interval_ms/10000)",
+      "module_id": "combat_core"
+    },
+    {
+      "id": "enhance_success_rate",
+      "name": "강화 성공률",
+      "expression": "clamp(base_rate + enhance_success_bonus_pct - enhance_level*penalty_per_level, min_rate, max_rate)",
+      "module_id": "enhance_system"
+    },
+    {
+      "id": "drop_chance_final",
+      "name": "최종 드랍률",
+      "expression": "clamp(base_drop_chance_pct*(1+item_find_chance_pct),0,max_drop_chance_pct)",
+      "module_id": "loot_system"
+    }
+  ]
+}

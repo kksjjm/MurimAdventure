@@ -3,7 +3,8 @@
 // =============================================================================
 
 import Phaser from 'phaser';
-import { ITEMS_BY_ID, SKILLS_BY_ID, getExpForLevel } from '../../data/defaultData.js';
+import { getExpForLevel } from '../../data/defaultData.js';
+import { getGameData, getItemIconKey } from '../../data/GameDataLoader.js';
 import { EQUIPMENT_SLOTS, ITEM_RARITY, getProficiencyLevel, getRarityDisplay } from '../../data/constants.js';
 import SaveSystem from '../systems/SaveSystem.js';
 
@@ -213,8 +214,8 @@ export default class UIScene extends Phaser.Scene {
       const text = this.skillSlotTexts[i];
       const gfx = this.skillSlotGfx[i];
 
-      if (skillId && SKILLS_BY_ID[skillId]) {
-        const skill = SKILLS_BY_ID[skillId];
+      if (skillId && getGameData().skills[skillId]) {
+        const skill = getGameData().skills[skillId];
         text.setText(skill.nameKo || skill.name);
 
         // Cooldown / Duration overlay
@@ -406,7 +407,7 @@ export default class UIScene extends Phaser.Scene {
     const gridY = py + 40;
 
     player.inventory.forEach((invEntry, idx) => {
-      const itemData = ITEMS_BY_ID[invEntry.itemId];
+      const itemData = getGameData().items[invEntry.itemId];
       if (!itemData) return;
 
       const col = idx % gridCols;
@@ -422,11 +423,16 @@ export default class UIScene extends Phaser.Scene {
       slotBg.strokeRect(cx, cy, cellSize, cellSize);
       this.panelContainer.add(slotBg);
 
-      // Item icon (map type to icon key)
-      const iconMap = { WEAPON: 'icon_sword', ARMOR: 'icon_armor', ACCESSORY: 'icon_staff', CONSUMABLE: 'icon_potion' };
-      const iconKey = itemData.icon || iconMap[itemData.type] || 'icon_potion';
+      // Item icon - use item-specific icon from data or slot/type-based default
+      const iconKey = getItemIconKey(itemData);
       const icon = this.add.image(cx + cellSize / 2, cy + cellSize / 2 - 4, iconKey);
-      icon.setScale(2);
+      // Auto-scale to fit within cell (max 36px to leave padding)
+      const maxIconSize = cellSize - 6;
+      const texFrame = icon.frame;
+      const iconW = texFrame.width;
+      const iconH = texFrame.height;
+      const fitScale = Math.min(maxIconSize / iconW, maxIconSize / iconH, 2.5);
+      icon.setScale(fitScale);
       this.panelContainer.add(icon);
 
       // Quantity
@@ -592,7 +598,7 @@ export default class UIScene extends Phaser.Scene {
 
     let yOff = py + 40;
     for (const skillId of player.skills) {
-      const skill = SKILLS_BY_ID[skillId];
+      const skill = getGameData().skills[skillId];
       if (!skill) continue;
 
       // Skill row background

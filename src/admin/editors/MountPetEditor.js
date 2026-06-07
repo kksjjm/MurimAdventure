@@ -114,6 +114,7 @@ export class MountPetEditor {
           </div>
           <div class="form-group"><label>특수 능력 (쉼표 구분)</label><input type="text" id="editMtAbilities" value="${(mount.abilities || []).join(', ')}"></div>
           <div class="form-group"><label>획득 방법</label><input type="text" id="editMtObtain" value="${mount.obtainMethod || ''}"></div>
+          <div class="form-group"><label>스프라이트 키</label><input type="text" id="editMtSprite" value="${mount.spriteKey || ''}" placeholder="예: mount_horse"></div>
 
           <h4 style="color:var(--gold);font-size:13px;margin:12px 0 8px;">레벨 단계</h4>
           <div id="tierList">${tierRows}</div>
@@ -162,6 +163,7 @@ export class MountPetEditor {
         abilities: abilitiesStr ? abilitiesStr.split(',').map(s => s.trim()).filter(Boolean) : [],
         rarity: overlay.querySelector('#editMtRarity').value,
         obtainMethod: overlay.querySelector('#editMtObtain').value.trim(),
+        spriteKey: overlay.querySelector('#editMtSprite').value.trim() || null,
         levelTiers: tiers,
       };
 
@@ -278,6 +280,7 @@ export class MountPetEditor {
           <div class="form-row" style="flex-wrap:wrap;">${statInputs}</div>
 
           <div class="form-group"><label>능력 (쉼표 구분)</label><input type="text" id="editPetAbilities" value="${(pet.abilities || []).join(', ')}"></div>
+          <div class="form-group"><label>스프라이트 키</label><input type="text" id="editPetSprite" value="${pet.spriteKey || ''}" placeholder="예: pet_fire_fox"></div>
 
           <div class="form-row">
             <div class="form-group"><label>레벨당 경험치</label><input type="number" id="editPetExpPerLvl" value="${pet.growthSystem.expPerLevel || 100}"></div>
@@ -343,6 +346,7 @@ export class MountPetEditor {
         },
         elementAffinity: overlay.querySelector('#editPetElem').value,
         rarity: overlay.querySelector('#editPetRarity').value,
+        spriteKey: overlay.querySelector('#editPetSprite').value.trim() || null,
         evolutionTiers: evos,
       };
 

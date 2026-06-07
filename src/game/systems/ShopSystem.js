@@ -2,15 +2,15 @@
 // ShopSystem.js - Buy/sell shop UI using Phaser graphics
 // =============================================================================
 
-import { ITEMS_BY_ID } from '../../data/defaultData.js';
+import { getGameData } from '../../data/GameDataLoader.js';
 import { SHOP_CONSUMABLES_BY_ID, WEAPON_SHOP_ITEMS, GENERAL_SHOP_ITEMS } from '../data/shopData.js';
 
 /**
- * Resolve an item definition by ID, checking both the default items
+ * Resolve an item definition by ID, checking both the game data items
  * and the shop-exclusive consumables.
  */
 function getItemData(itemId) {
-  return ITEMS_BY_ID[itemId] || SHOP_CONSUMABLES_BY_ID[itemId] || null;
+  return getGameData().items[itemId] || SHOP_CONSUMABLES_BY_ID[itemId] || null;
 }
 
 export default class ShopSystem {

@@ -1,65 +1,66 @@
 // =============================================================================
-// questData.js - Quest definitions for Murim Adventure
+// questData.js - Modular ARPG quest definitions
 // =============================================================================
 
 export const QUESTS = Object.freeze({
   quest_01: {
     id: 'quest_01',
-    nameKo: '마을 수호',
-    name: 'Village Protection',
-    description: '마을 주변에 출몰하는 멧돼지를 처치하여 마을을 안전하게 지켜주세요.',
+    module_id: 'quest_system',
+    nameKo: '전투 검증',
+    name: 'Combat Validation',
+    description: '새 전투 액션/히트박스 설계가 정상 동작하는지 훈련용 박스로 확인합니다.',
     objectives: [
-      { type: 'kill', target: 'mon_wild_boar', targetNameKo: '멧돼지', count: 3, current: 0 },
+      { type: 'kill', target: 'monster_training_box', targetNameKo: '훈련용 박스', count: 3, current: 0 },
     ],
     rewards: {
       exp: 50,
       gold: 30,
-      items: [],
+      items: [{ itemId: 'consumable_hp_001', quantity: 2 }],
     },
   },
-
   quest_02: {
     id: 'quest_02',
-    nameKo: '산적 토벌',
-    name: 'Bandit Subjugation',
-    description: '산적들이 마을 근처까지 내려왔습니다. 산적 2명을 처치해 주세요.',
+    module_id: 'quest_system',
+    nameKo: 'AI 검증',
+    name: 'AI Validation',
+    description: '공격형 박스의 추적/공격 AI가 정상 동작하는지 확인합니다.',
     objectives: [
-      { type: 'kill', target: 'mon_mountain_bandit', targetNameKo: '산적', count: 2, current: 0 },
+      { type: 'kill', target: 'monster_aggressive_box', targetNameKo: '공격형 박스', count: 2, current: 0 },
     ],
     rewards: {
       exp: 100,
       gold: 50,
-      items: [{ itemId: 'wpn_crescent_blade', quantity: 1 }],
+      items: [{ itemId: 'material_core_001', quantity: 3 }],
     },
   },
-
   quest_03: {
     id: 'quest_03',
-    nameKo: '약초 채집',
-    name: 'Herb Gathering',
-    description: '약초꾼에게 약초 3개를 구해다 주세요. 숲에서 약초를 채집할 수 있습니다.',
+    module_id: 'quest_system',
+    nameKo: '템플릿 수집',
+    name: 'Template Collection',
+    description: '아이템 템플릿/재료 데이터 흐름을 확인하기 위해 코어 조각을 수집합니다.',
     objectives: [
-      { type: 'collect', target: 'mat_herb', targetNameKo: '약초', count: 3, current: 0 },
+      { type: 'collect', target: 'material_core_001', targetNameKo: '테스트 코어 조각', count: 3, current: 0 },
     ],
     rewards: {
       exp: 80,
       gold: 40,
-      items: [{ itemId: 'item_hp_potion', quantity: 3 }],
+      items: [{ itemId: 'weapon_sword_001', quantity: 1 }],
     },
   },
-
   quest_04: {
     id: 'quest_04',
-    nameKo: '대장장이의 부탁',
-    name: "Blacksmith's Request",
-    description: '촌장이 대장장이에게 전할 말이 있다고 합니다. 대장장이를 찾아가 보세요.',
+    module_id: 'quest_system',
+    nameKo: '관리자 대화',
+    name: 'Admin Dialogue',
+    description: 'NPC 대화 분기와 talk objective를 확인합니다.',
     objectives: [
-      { type: 'talk', target: 'npc_blacksmith', targetNameKo: '대장장이', count: 1, current: 0 },
+      { type: 'talk', target: 'npc_blacksmith', targetNameKo: '장비 관리자', count: 1, current: 0 },
     ],
     rewards: {
       exp: 30,
       gold: 0,
-      items: [{ itemId: 'wpn_iron_sword', quantity: 1 }],
+      items: [{ itemId: 'armor_cloth_001', quantity: 1 }],
     },
   },
 });

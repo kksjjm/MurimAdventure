@@ -100,7 +100,7 @@ export class MonsterEditor {
       stats: { HP: 50, maxHP: 50, ATK: 10, DEF: 5, SPD: 80, ACCURACY: 85, EVASION: 5, CRIT_RATE: 5, CRIT_DMG: 130 },
       ai: 'PASSIVE', chaseRange: 100, attackRange: 30, attackSpeed: 1000,
       exp: 20, gold: { min: 5, max: 15 },
-      drops: [], sprite: '', tint: 0xffffff
+      drops: [], spriteKey: '', tint: 0xffffff
     } : JSON.parse(JSON.stringify(this.dm.data.monsters[monsterId] || {}));
 
     if (!mon.id && monsterId) { mon.id = monsterId; }
@@ -155,7 +155,14 @@ export class MonsterEditor {
             <div class="form-group"><label>최대 골드</label><input type="number" id="editMonGoldMax" value="${mon.gold.max || 0}"></div>
           </div>
           <div class="form-row">
-            <div class="form-group"><label>스프라이트</label><input type="text" id="editMonSprite" value="${mon.sprite || ''}"></div>
+            <div class="form-group" style="flex:2;">
+              <label>스프라이트 키</label>
+              <input type="text" id="editMonSprite" value="${mon.spriteKey || mon.sprite || ''}" list="monSpriteList" placeholder="예: monster_box">
+              <datalist id="monSpriteList">
+                ${this._getMonsterSpriteOptions()}
+              </datalist>
+              <small style="color:var(--text-dim);font-size:10px;">스프라이트 에디터에서 커스텀 몬스터 스프라이트를 생성할 수 있습니다</small>
+            </div>
             <div class="form-group"><label>틴트 (hex)</label><input type="text" id="editMonTint" value="${typeof mon.tint === 'number' ? '0x' + mon.tint.toString(16) : mon.tint || ''}"></div>
           </div>
 
@@ -224,7 +231,7 @@ export class MonsterEditor {
           max: parseInt(overlay.querySelector('#editMonGoldMax').value) || 0
         },
         drops,
-        sprite: overlay.querySelector('#editMonSprite').value.trim(),
+        spriteKey: overlay.querySelector('#editMonSprite').value.trim(),
         tint,
       };
 
@@ -235,6 +242,21 @@ export class MonsterEditor {
       this.render(root);
       window.showToast('몬스터가 저장되었습니다.', 'success');
     };
+  }
+
+  _getMonsterSpriteOptions() {
+    // Built-in monster sprite keys from SPRITE_REGISTRY
+    const builtIn = [
+      'orc', 'orc_warrior', 'orc_shaman', 'orc_rogue',
+      'skeleton_base', 'skeleton_warrior', 'skeleton_mage', 'skeleton_rogue',
+    ];
+    // Custom sprites from localStorage
+    const customs = (() => {
+      try { return Object.keys(JSON.parse(localStorage.getItem('murimAdventure_customSprites') || '{}')); }
+      catch { return []; }
+    })();
+    const monsterCustoms = customs.filter(k => k.startsWith('mon_') || k.startsWith('monster_'));
+    return [...builtIn, ...monsterCustoms].map(k => `<option value="${k}">${k}</option>`).join('');
   }
 
   _dropRowHtml(drop, idx, itemIds) {
