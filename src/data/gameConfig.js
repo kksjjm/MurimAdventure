@@ -13,9 +13,9 @@ export const PHASER_CONFIG = Object.freeze({
   pixelArt: true,
   roundPixels: true,
   antialias: false,
-  width: 480,
-  height: 320,
-  zoom: 2,
+  width: 960,
+  height: 540,
+  zoom: 1,
   fps: {
     target: 60,
     forceSetTimeOut: false,
@@ -37,7 +37,7 @@ export const PHASER_CONFIG = Object.freeze({
 // =============================================================================
 
 export const MAP_CONFIG = Object.freeze({
-  TILE_SIZE: 16,
+  TILE_SIZE: 32,
   CHUNK_SIZE_TILES: 32,        // 32x32 tiles per chunk
   RENDER_DISTANCE_CHUNKS: 3,   // chunks visible around camera
   LAYERS: ['ground', 'terrain', 'objects', 'rooftops', 'collision'],

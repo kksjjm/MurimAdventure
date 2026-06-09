@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { ITEM_RARITY, ELEMENT_TYPES, STATS } from '../../data/constants.js';
+import { bindSpriteSelect, spriteSelectHtml } from '../components/SpriteSelect.js';
 
 export class MountPetEditor {
   constructor(dataManager) {
@@ -114,7 +115,7 @@ export class MountPetEditor {
           </div>
           <div class="form-group"><label>특수 능력 (쉼표 구분)</label><input type="text" id="editMtAbilities" value="${(mount.abilities || []).join(', ')}"></div>
           <div class="form-group"><label>획득 방법</label><input type="text" id="editMtObtain" value="${mount.obtainMethod || ''}"></div>
-          <div class="form-group"><label>스프라이트 키</label><input type="text" id="editMtSprite" value="${mount.spriteKey || ''}" placeholder="예: mount_horse"></div>
+          <div class="form-group"><label>스프라이트 키</label>${spriteSelectHtml({ id: 'editMtSprite', value: mount.spriteKey || '', placeholder: '탈것 스프라이트 검색...' })}</div>
 
           <h4 style="color:var(--gold);font-size:13px;margin:12px 0 8px;">레벨 단계</h4>
           <div id="tierList">${tierRows}</div>
@@ -130,6 +131,7 @@ export class MountPetEditor {
     document.body.appendChild(overlay);
     overlay.querySelectorAll('.modal-close-btn').forEach(b => b.onclick = () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    bindSpriteSelect(overlay, 'editMtSprite');
 
     overlay.querySelector('#addTierBtn').onclick = () => {
       overlay.querySelector('#tierList').insertAdjacentHTML('beforeend', `
@@ -280,7 +282,7 @@ export class MountPetEditor {
           <div class="form-row" style="flex-wrap:wrap;">${statInputs}</div>
 
           <div class="form-group"><label>능력 (쉼표 구분)</label><input type="text" id="editPetAbilities" value="${(pet.abilities || []).join(', ')}"></div>
-          <div class="form-group"><label>스프라이트 키</label><input type="text" id="editPetSprite" value="${pet.spriteKey || ''}" placeholder="예: pet_fire_fox"></div>
+          <div class="form-group"><label>스프라이트 키</label>${spriteSelectHtml({ id: 'editPetSprite', value: pet.spriteKey || '', placeholder: '환수 스프라이트 검색...' })}</div>
 
           <div class="form-row">
             <div class="form-group"><label>레벨당 경험치</label><input type="number" id="editPetExpPerLvl" value="${pet.growthSystem.expPerLevel || 100}"></div>
@@ -301,6 +303,7 @@ export class MountPetEditor {
     document.body.appendChild(overlay);
     overlay.querySelectorAll('.modal-close-btn').forEach(b => b.onclick = () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    bindSpriteSelect(overlay, 'editPetSprite');
 
     overlay.querySelector('#addEvoBtn').onclick = () => {
       overlay.querySelector('#evoList').insertAdjacentHTML('beforeend', `

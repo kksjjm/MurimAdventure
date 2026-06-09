@@ -1,5 +1,5 @@
 // =============================================================================
-// Monster.js - Monster Entity Class (64x64 HD)
+// Monster.js - Monster Entity Class (32x64 actor, 32x32 collision)
 // =============================================================================
 
 import Phaser from 'phaser';
@@ -55,18 +55,9 @@ export default class Monster extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
 
     this.setDepth(9);
-    // Adjust collision body based on whether using new 32x32 sprites or legacy 64x64
-    const usingNewSprites = scene.textures.exists(idleTextureKey);
-    if (usingNewSprites) {
-      // 32x32 sprite
-      this.body.setSize(20, 24);
-      this.body.setOffset(6, 6);
-    } else {
-      // 64x64 legacy sprite
-      this.body.setSize(36, 40);
-      this.body.setOffset(14, 20);
-    }
-    this._usingNewSprites = usingNewSprites;
+    this.body.setSize(32, 32);
+    this.body.setOffset(0, 16);
+    this._usingNewSprites = scene.textures.exists(idleTextureKey);
 
     // Prevent monsters from being pushed out of bounds
     this.setCollideWorldBounds(true);
@@ -148,8 +139,9 @@ export default class Monster extends Phaser.Physics.Arcade.Sprite {
 
     const barWidth = 40;
     const barHeight = 5;
+    const spriteBottom = this.y + this.displayHeight / 2;
     const x = this.x - barWidth / 2;
-    const y = this.y - 30;
+    const y = spriteBottom + 4;
 
     // Background
     this.healthBar.fillStyle(0x440000, 0.8);

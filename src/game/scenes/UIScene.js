@@ -1,17 +1,46 @@
 // =============================================================================
-// UIScene.js - HUD overlay scene (runs parallel to WorldScene)
+// UIScene.js - Bottom HUD and integrated character window
 // =============================================================================
 
 import Phaser from 'phaser';
 import { getExpForLevel } from '../../data/defaultData.js';
 import { getGameData, getItemIconKey } from '../../data/GameDataLoader.js';
-import { EQUIPMENT_SLOTS, ITEM_RARITY, getProficiencyLevel, getRarityDisplay } from '../../data/constants.js';
+import { EQUIPMENT_SLOTS, getRarityDisplay } from '../../data/constants.js';
 import SaveSystem from '../systems/SaveSystem.js';
+
+export const BOTTOM_UI_HEIGHT = 112;
+
+const STAT_SUMMARY = ['ATK', 'DEF', 'STR', 'AGI', 'INT', 'LUK'];
+const STAT_DETAILS = [
+  'HP', 'maxHP', 'MP', 'maxMP',
+  'ATK', 'DEF', 'STR', 'AGI', 'INT', 'LUK',
+  'ACCURACY', 'EVASION', 'CRIT_RATE', 'CRIT_DMG',
+  'DMG_BONUS', 'DMG_TAKEN', 'HP_REGEN', 'MP_REGEN',
+  'MOVE_SPEED', 'ATK_SPEED',
+];
+
+const EQUIP_SLOT_LABELS = {
+  [EQUIPMENT_SLOTS.WEAPON.key]: '무기',
+  [EQUIPMENT_SLOTS.SHIELD.key]: '방패',
+  [EQUIPMENT_SLOTS.HELMET.key]: '투구',
+  [EQUIPMENT_SLOTS.ARMOR.key]: '갑옷',
+  [EQUIPMENT_SLOTS.PANTS.key]: '하의',
+  [EQUIPMENT_SLOTS.SHOES.key]: '신발',
+  [EQUIPMENT_SLOTS.GLOVES.key]: '장갑',
+  [EQUIPMENT_SLOTS.BELT.key]: '허리',
+  [EQUIPMENT_SLOTS.RING_RIGHT.key]: '반지R',
+  [EQUIPMENT_SLOTS.RING_LEFT.key]: '반지L',
+  [EQUIPMENT_SLOTS.NECKLACE.key]: '목걸이',
+  [EQUIPMENT_SLOTS.TALISMAN.key]: '부적',
+  [EQUIPMENT_SLOTS.JADE_TOKEN.key]: '옥패',
+};
 
 export default class UIScene extends Phaser.Scene {
   constructor() {
     super({ key: 'UIScene' });
-    this.activePanel = null; // 'inventory' | 'equipment' | 'skills' | 'character' | null
+    this.activePanel = null;
+    this.showStatDetails = false;
+    this.quickItemSlots = [];
   }
 
   init(data) {
@@ -19,323 +48,338 @@ export default class UIScene extends Phaser.Scene {
   }
 
   create() {
-    const { width, height } = this.cameras.main;
+    this.saveSystem = new SaveSystem();
+    this.hudContainer = this.add.container(0, 0).setDepth(1000);
+    this.panelContainer = this.add.container(0, 0).setDepth(2500).setVisible(false);
+    this.tooltipContainer = null;
 
-    // --- HP Bar ---
-    this._createBar('hp', 10, 10, 180, 14, 0xcc3333, 0x440000);
-    // --- MP Bar ---
-    this._createBar('mp', 10, 30, 180, 14, 0x3366cc, 0x001144);
-    // --- EXP Bar ---
-    this._createBar('exp', (width - 300) / 2, height - 24, 300, 12, 0x33cc66, 0x003311);
+    this._createBottomHud();
+    this._bindEvents();
+    this._updateHUD();
+  }
 
-    // --- Level Display ---
-    this.levelText = this.add.text(10, 50, 'Lv. 1', {
-      fontSize: '14px',
-      fontFamily: 'monospace',
-      color: '#ffffff',
-      stroke: '#000000',
-      strokeThickness: 2,
-    }).setDepth(1001);
-
-    // --- Gold Display ---
-    this.goldText = this.add.text(10, 70, 'Gold: 100', {
-      fontSize: '12px',
-      fontFamily: 'monospace',
-      color: '#ffcc00',
-      stroke: '#000000',
-      strokeThickness: 2,
-    }).setDepth(1001);
-
-    // --- Skill Slots (bottom center) ---
-    this._createSkillSlots(width, height);
-
-    // --- Menu Buttons (right side) ---
-    this._createMenuButtons(width);
-
-    // --- Proficiency display ---
-    this.profText = this.add.text(10, 90, '', {
-      fontSize: '10px',
-      fontFamily: 'monospace',
-      color: '#aaaacc',
-      stroke: '#000000',
-      strokeThickness: 2,
-    }).setDepth(1001);
-
-    // --- Panel container (for modal panels) ---
-    this.panelContainer = this.add.container(0, 0);
-    this.panelContainer.setDepth(2000);
-    this.panelContainer.setVisible(false);
-
-    // --- Listen to world scene events ---
+  _bindEvents() {
     const ws = this.worldScene;
     if (ws) {
       ws.events.on('player-stats-changed', this._updateHUD, this);
       ws.events.on('player-levelup', this._onLevelUp, this);
-      ws.events.on('exp-changed', this._updateExpBar, this);
+      ws.events.on('exp-changed', this._updateHUD, this);
       ws.events.on('inventory-changed', this._onInventoryChanged, this);
       ws.events.on('equipment-changed', this._onEquipmentChanged, this);
       ws.events.on('proficiency-levelup', this._onProfLevelUp, this);
     }
 
-    // ESC to close panels
-    this.input.keyboard.on('keydown-ESC', () => {
-      this._closePanel();
+    this.input.keyboard.on('keydown-I', () => this._toggleCharacterPanel());
+    this.input.keyboard.on('keydown-E', () => this._toggleCharacterPanel());
+    this.input.keyboard.on('keydown-C', () => this._toggleCharacterPanel());
+    this.input.keyboard.on('keydown-K', () => this._toggleCharacterPanel());
+    this.input.keyboard.on('keydown-ESC', () => this._closePanel());
+    this.input.keyboard.on('keydown-M', () => this.worldScene?.toggleMinimap?.());
+    ['SIX', 'SEVEN', 'EIGHT', 'NINE'].forEach((key, index) => {
+      this.input.keyboard.on(`keydown-${key}`, () => this._useQuickItem(index));
     });
-
-    // M for minimap toggle
-    this.input.keyboard.on('keydown-M', () => {
-      if (this.worldScene) this.worldScene.toggleMinimap();
-    });
-
-    // --- Save System ---
-    this.saveSystem = new SaveSystem();
-
-    // F5 to quick save
     this.input.keyboard.on('keydown-F5', (e) => {
       e.preventDefault();
       this._doSave();
     });
-    // F9 to quick load
     this.input.keyboard.on('keydown-F9', (e) => {
       e.preventDefault();
       this._doLoadLast();
     });
 
-    // Auto-save every 60 seconds
     this.time.addEvent({
       delay: 60000,
       callback: () => this._doAutoSave(),
       loop: true,
     });
-
-    // Initial HUD update
-    this._updateHUD();
   }
 
-  // ==========================================================================
-  // Bars
-  // ==========================================================================
+  _createBottomHud() {
+    const { width, height } = this.cameras.main;
+    const y = height - BOTTOM_UI_HEIGHT;
 
-  _createBar(key, x, y, w, h, fillColor, bgColor) {
     const bg = this.add.graphics();
-    bg.fillStyle(bgColor, 0.8);
-    bg.fillRect(x, y, w, h);
-    bg.lineStyle(1, 0x888888, 0.5);
-    bg.strokeRect(x, y, w, h);
-    bg.setDepth(1000);
+    bg.fillStyle(0x101018, 0.98);
+    bg.fillRect(0, y, width, BOTTOM_UI_HEIGHT);
+    bg.fillStyle(0x1b2130, 0.96);
+    bg.fillRect(0, y, width, 24);
+    bg.lineStyle(2, 0x45516a, 1);
+    bg.lineBetween(0, y + 0.5, width, y + 0.5);
+    bg.lineStyle(1, 0x2b3347, 1);
+    bg.strokeRect(8, y + 8, 250, BOTTOM_UI_HEIGHT - 16);
+    bg.strokeRect(270, y + 8, 360, BOTTOM_UI_HEIGHT - 16);
+    bg.strokeRect(642, y + 8, 190, BOTTOM_UI_HEIGHT - 16);
+    bg.strokeRect(844, y + 8, 108, BOTTOM_UI_HEIGHT - 16);
+    this.hudContainer.add(bg);
 
-    const fill = this.add.graphics();
-    fill.setDepth(1001);
-
-    const text = this.add.text(x + w / 2, y + h / 2, '', {
-      fontSize: '10px',
+    this.levelText = this.add.text(20, y + 18, 'Lv. 1', {
+      fontSize: '15px',
       fontFamily: 'monospace',
       color: '#ffffff',
       stroke: '#000000',
       strokeThickness: 2,
-    }).setOrigin(0.5).setDepth(1002);
+    });
+    this.hudContainer.add(this.levelText);
 
-    this[`${key}BarBg`] = bg;
-    this[`${key}BarFill`] = fill;
-    this[`${key}BarText`] = text;
-    this[`${key}BarConfig`] = { x, y, w, h, fillColor };
+    this.goldText = this.add.text(20, y + 92, 'Gold 0', {
+      fontSize: '11px',
+      fontFamily: 'monospace',
+      color: '#ffd166',
+      stroke: '#000000',
+      strokeThickness: 2,
+    });
+    this.hudContainer.add(this.goldText);
+
+    this.hpBar = this._createBar(76, y + 18, 166, 16, 0xcc3333, 'HP');
+    this.mpBar = this._createBar(76, y + 42, 166, 16, 0x3366cc, 'MP');
+    this.expBar = this._createBar(76, y + 64, 166, 10, 0x33cc66, 'EXP', 9);
+
+    this.profText = this.add.text(20, y + 76, '', {
+      fontSize: '10px',
+      fontFamily: 'monospace',
+      color: '#b8c0ff',
+      stroke: '#000000',
+      strokeThickness: 2,
+    });
+    this.hudContainer.add(this.profText);
+
+    this._createSkillSlots(290, y + 36);
+    this._createQuickItems(662, y + 38);
+    this._createHudButtons(858, y + 20);
   }
 
-  _updateBar(key, current, max) {
-    const config = this[`${key}BarConfig`];
-    if (!config) return;
+  _createBar(x, y, w, h, color, label, fontSize = 10) {
+    const bg = this.add.graphics();
+    bg.fillStyle(0x05050a, 0.8);
+    bg.fillRect(x, y, w, h);
+    bg.lineStyle(1, 0x51576b, 1);
+    bg.strokeRect(x, y, w, h);
+    this.hudContainer.add(bg);
 
-    const fill = this[`${key}BarFill`];
-    const text = this[`${key}BarText`];
-    const pct = Math.max(0, Math.min(1, current / max));
+    const fill = this.add.graphics();
+    this.hudContainer.add(fill);
 
-    fill.clear();
-    fill.fillStyle(config.fillColor, 0.9);
-    fill.fillRect(config.x + 1, config.y + 1, (config.w - 2) * pct, config.h - 2);
+    const text = this.add.text(x + w / 2, y + h / 2, '', {
+      fontSize: `${fontSize}px`,
+      fontFamily: 'monospace',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 2,
+    }).setOrigin(0.5);
+    this.hudContainer.add(text);
 
-    text.setText(`${Math.floor(current)} / ${Math.floor(max)}`);
+    const labelText = this.add.text(x - 34, y + h / 2, label, {
+      fontSize: '10px',
+      fontFamily: 'monospace',
+      color: '#9aa4bd',
+    }).setOrigin(0, 0.5);
+    this.hudContainer.add(labelText);
+
+    return { x, y, w, h, color, fill, text };
   }
 
-  // ==========================================================================
-  // Skill Slots
-  // ==========================================================================
+  _updateBar(bar, current, max, formatter = null) {
+    const safeMax = Math.max(1, Number(max) || 1);
+    const pct = Phaser.Math.Clamp((Number(current) || 0) / safeMax, 0, 1);
+    bar.fill.clear();
+    bar.fill.fillStyle(bar.color, 0.92);
+    bar.fill.fillRect(bar.x + 1, bar.y + 1, Math.max(0, (bar.w - 2) * pct), bar.h - 2);
+    bar.text.setText(formatter ? formatter(current, max) : `${Math.floor(current || 0)} / ${Math.floor(safeMax)}`);
+  }
 
-  _createSkillSlots(width, height) {
-    this.skillSlotGfx = [];
-    this.skillSlotTexts = [];
-    const slotSize = 40;
-    const gap = 6;
-    const totalWidth = 5 * slotSize + 4 * gap;
-    const startX = (width - totalWidth) / 2;
-    const startY = height - 70;
-
+  _createSkillSlots(startX, startY) {
+    this.skillSlots = [];
+    const size = 46;
+    const gap = 8;
     for (let i = 0; i < 5; i++) {
-      const sx = startX + i * (slotSize + gap);
-
-      // Slot background
+      const x = startX + i * (size + gap);
       const bg = this.add.graphics();
-      bg.fillStyle(0x1a1a2e, 0.9);
-      bg.fillRect(sx, startY, slotSize, slotSize);
-      bg.lineStyle(1, 0x4a4a6e);
-      bg.strokeRect(sx, startY, slotSize, slotSize);
-      bg.setDepth(1000);
+      bg.fillStyle(0x1b2130, 0.95);
+      bg.fillRect(x, startY, size, size);
+      bg.lineStyle(1, 0x556078, 1);
+      bg.strokeRect(x, startY, size, size);
+      this.hudContainer.add(bg);
 
-      // Key number
-      const keyText = this.add.text(sx + 2, startY + 1, `${i + 1}`, {
-        fontSize: '9px',
+      const keyText = this.add.text(x + 4, startY + 3, `${i + 1}`, {
+        fontSize: '10px',
         fontFamily: 'monospace',
-        color: '#666688',
-      }).setDepth(1002);
+        color: '#9aa4bd',
+      });
+      this.hudContainer.add(keyText);
 
-      // Skill name
-      const skillText = this.add.text(sx + slotSize / 2, startY + slotSize / 2, '', {
+      const nameText = this.add.text(x + size / 2, startY + size / 2 + 2, '', {
         fontSize: '8px',
         fontFamily: 'monospace',
-        color: '#ccccee',
+        color: '#dce4ff',
         align: 'center',
-        wordWrap: { width: slotSize - 4 },
-      }).setOrigin(0.5).setDepth(1002);
+        wordWrap: { width: size - 6 },
+      }).setOrigin(0.5);
+      this.hudContainer.add(nameText);
 
-      // Cooldown overlay
-      const cdOverlay = this.add.graphics();
-      cdOverlay.setDepth(1001);
-
-      this.skillSlotGfx.push({ bg, cdOverlay, sx, sy: startY, size: slotSize });
-      this.skillSlotTexts.push(skillText);
+      const cd = this.add.graphics();
+      this.hudContainer.add(cd);
+      this.skillSlots.push({ x, y: startY, size, bg, nameText, cd });
     }
+
+    const label = this.add.text(startX, startY - 20, '스킬', {
+      fontSize: '12px',
+      fontFamily: 'monospace',
+      color: '#ffcc66',
+    });
+    this.hudContainer.add(label);
+  }
+
+  _createQuickItems(startX, startY) {
+    this.itemSlots = [];
+    const size = 38;
+    const gap = 5;
+    for (let i = 0; i < 4; i++) {
+      const x = startX + i * (size + gap);
+      const bg = this.add.graphics();
+      bg.fillStyle(0x1b2130, 0.95);
+      bg.fillRect(x, startY, size, size);
+      bg.lineStyle(1, 0x556078, 1);
+      bg.strokeRect(x, startY, size, size);
+      this.hudContainer.add(bg);
+
+      const keyText = this.add.text(x + 4, startY + 3, `${i + 6}`, {
+        fontSize: '9px',
+        fontFamily: 'monospace',
+        color: '#9aa4bd',
+      });
+      this.hudContainer.add(keyText);
+
+      const icon = this.add.image(x + size / 2, startY + size / 2, 'icon_potion').setVisible(false);
+      this.hudContainer.add(icon);
+
+      const qty = this.add.text(x + size - 4, startY + size - 4, '', {
+        fontSize: '9px',
+        fontFamily: 'monospace',
+        color: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 2,
+      }).setOrigin(1, 1);
+      this.hudContainer.add(qty);
+
+      const zone = this.add.zone(x + size / 2, startY + size / 2, size, size).setInteractive();
+      zone.on('pointerdown', () => this._useQuickItem(i));
+      this.hudContainer.add(zone);
+      this.itemSlots.push({ x, y: startY, size, icon, qty, zone });
+    }
+
+    const label = this.add.text(startX, startY - 20, '사용 아이템', {
+      fontSize: '12px',
+      fontFamily: 'monospace',
+      color: '#ffcc66',
+    });
+    this.hudContainer.add(label);
+  }
+
+  _createHudButtons(startX, startY) {
+    const buttons = [
+      { label: '캐릭터 I', action: () => this._toggleCharacterPanel() },
+      { label: '미니맵 M', action: () => this.worldScene?.toggleMinimap?.() },
+      { label: '저장 F5', action: () => this._doSave() },
+      { label: '불러오기 F9', action: () => this._doLoadLast() },
+    ];
+    buttons.forEach((button, index) => {
+      const y = startY + index * 22;
+      const bg = this.add.graphics();
+      bg.fillStyle(0x263145, 0.95);
+      bg.fillRect(startX, y, 80, 18);
+      bg.lineStyle(1, 0x5a6888, 1);
+      bg.strokeRect(startX, y, 80, 18);
+      this.hudContainer.add(bg);
+
+      const text = this.add.text(startX + 40, y + 9, button.label, {
+        fontSize: '9px',
+        fontFamily: 'monospace',
+        color: '#edf2ff',
+      }).setOrigin(0.5);
+      this.hudContainer.add(text);
+
+      const zone = this.add.zone(startX + 40, y + 9, 80, 18).setInteractive();
+      zone.on('pointerover', () => bg.setAlpha(0.75));
+      zone.on('pointerout', () => bg.setAlpha(1));
+      zone.on('pointerdown', button.action);
+      this.hudContainer.add(zone);
+    });
   }
 
   _updateSkillSlots() {
-    if (!this.worldScene || !this.worldScene.player) return;
-    const player = this.worldScene.player;
-
-    for (let i = 0; i < 5; i++) {
+    const player = this.worldScene?.player;
+    if (!player) return;
+    const now = Date.now();
+    const skills = getGameData().skills || {};
+    for (let i = 0; i < this.skillSlots.length; i++) {
+      const slot = this.skillSlots[i];
       const skillId = player.skillSlots[i];
-      const text = this.skillSlotTexts[i];
-      const gfx = this.skillSlotGfx[i];
+      const skill = skills[skillId];
+      slot.cd.clear();
+      if (!skill) {
+        slot.nameText.setText('');
+        continue;
+      }
+      slot.nameText.setText(skill.nameKo || skill.name || skill.id);
 
-      if (skillId && getGameData().skills[skillId]) {
-        const skill = getGameData().skills[skillId];
-        text.setText(skill.nameKo || skill.name);
+      const activeEffect = player.activeSkillEffects[skillId] || player.channelEffects[skillId];
+      if (activeEffect) {
+        const remainPct = Phaser.Math.Clamp(1 - ((now - activeEffect.startTime) / Math.max(1, activeEffect.duration)), 0, 1);
+        slot.cd.fillStyle(0x22aa66, 0.35);
+        slot.cd.fillRect(slot.x, slot.y + slot.size * (1 - remainPct), slot.size, slot.size * remainPct);
+      }
 
-        // Cooldown / Duration overlay
-        gfx.cdOverlay.clear();
-        const now = Date.now();
-
-        // Check if skill is actively channeling/buffing (green overlay)
-        const activeEffect = player.activeSkillEffects[skillId] || player.channelEffects[skillId];
-        if (activeEffect) {
-          const elapsed = now - activeEffect.startTime;
-          const dur = activeEffect.duration;
-          const remaining = Math.max(0, dur - elapsed);
-          if (remaining > 0) {
-            const pct = remaining / dur;
-            gfx.cdOverlay.fillStyle(0x00aa44, 0.4);
-            gfx.cdOverlay.fillRect(gfx.sx, gfx.sy + gfx.size * (1 - pct), gfx.size, gfx.size * pct);
-          }
-        }
-
-        // Cooldown overlay (dark, on top)
-        const lastUsed = player.skillCooldowns[skillId] || 0;
-        const cd = skill.cooldown || 0;
-        const cdRemaining = Math.max(0, cd - (now - lastUsed));
-        if (cdRemaining > 0 && cd > 0) {
-          const pct = cdRemaining / cd;
-          gfx.cdOverlay.fillStyle(0x000000, 0.6);
-          gfx.cdOverlay.fillRect(gfx.sx, gfx.sy, gfx.size, gfx.size * pct);
-        }
-      } else {
-        text.setText('');
-        gfx.cdOverlay.clear();
+      const lastUsed = player.skillCooldowns[skillId] || 0;
+      const cooldown = skill.cooldown || 0;
+      const remain = Math.max(0, cooldown - (now - lastUsed));
+      if (remain > 0 && cooldown > 0) {
+        const pct = remain / cooldown;
+        slot.cd.fillStyle(0x000000, 0.62);
+        slot.cd.fillRect(slot.x, slot.y, slot.size, slot.size * pct);
       }
     }
   }
 
-  // ==========================================================================
-  // Menu Buttons
-  // ==========================================================================
+  _updateQuickItems() {
+    const player = this.worldScene?.player;
+    if (!player) return;
+    const items = getGameData().items || {};
+    this.quickItemSlots = player.inventory
+      .filter(entry => items[entry.itemId]?.type === 'CONSUMABLE')
+      .slice(0, this.itemSlots.length);
 
-  _createMenuButtons(screenWidth) {
-    const buttons = [
-      { label: '가방 (I)', key: 'inventory', hotkey: 'I' },
-      { label: '장비 (E)', key: 'equipment', hotkey: 'E' },
-      { label: '무공 (K)', key: 'skills', hotkey: 'K' },
-      { label: '정보 (C)', key: 'character', hotkey: 'C' },
-      { label: '저장 (F5)', key: 'save', hotkey: null },
-      { label: '불러오기', key: 'load', hotkey: null },
-    ];
-
-    const btnW = 80;
-    const btnH = 24;
-    const gap = 4;
-    const startX = screenWidth - btnW - 10;
-    const startY = 170;
-
-    buttons.forEach((btn, i) => {
-      const by = startY + i * (btnH + gap);
-
-      const bg = this.add.graphics();
-      bg.fillStyle(0x2a2a4e, 0.9);
-      bg.fillRect(startX, by, btnW, btnH);
-      bg.lineStyle(1, 0x4a4a6e);
-      bg.strokeRect(startX, by, btnW, btnH);
-      bg.setDepth(1000);
-
-      const text = this.add.text(startX + btnW / 2, by + btnH / 2, btn.label, {
-        fontSize: '11px',
-        fontFamily: 'monospace',
-        color: '#ccccee',
-      }).setOrigin(0.5).setDepth(1001);
-
-      // Make interactive
-      const hitZone = this.add.zone(startX + btnW / 2, by + btnH / 2, btnW, btnH)
-        .setInteractive()
-        .setDepth(1003);
-
-      hitZone.on('pointerover', () => {
-        bg.clear();
-        bg.fillStyle(0x3a3a6e, 0.9);
-        bg.fillRect(startX, by, btnW, btnH);
-        bg.lineStyle(1, 0x6a6a9e);
-        bg.strokeRect(startX, by, btnW, btnH);
-      });
-      hitZone.on('pointerout', () => {
-        bg.clear();
-        bg.fillStyle(0x2a2a4e, 0.9);
-        bg.fillRect(startX, by, btnW, btnH);
-        bg.lineStyle(1, 0x4a4a6e);
-        bg.strokeRect(startX, by, btnW, btnH);
-      });
-      hitZone.on('pointerdown', () => {
-        this._togglePanel(btn.key);
-      });
-
-      // Hotkey
-      this.input.keyboard.on(`keydown-${btn.hotkey}`, () => {
-        this._togglePanel(btn.key);
-      });
-    });
+    for (let i = 0; i < this.itemSlots.length; i++) {
+      const slot = this.itemSlots[i];
+      const inv = this.quickItemSlots[i];
+      const item = inv ? items[inv.itemId] : null;
+      if (!item) {
+        slot.icon.setVisible(false);
+        slot.qty.setText('');
+        continue;
+      }
+      slot.icon.setTexture(getItemIconKey(item));
+      const frame = slot.icon.frame;
+      slot.icon.setScale(Math.min((slot.size - 8) / frame.width, (slot.size - 8) / frame.height, 2.5));
+      slot.icon.setVisible(true);
+      slot.qty.setText(inv.quantity > 1 ? String(inv.quantity) : '');
+    }
   }
 
-  // ==========================================================================
-  // Panel System
-  // ==========================================================================
+  _useQuickItem(index) {
+    const player = this.worldScene?.player;
+    const inv = this.quickItemSlots[index];
+    if (!player || !inv) return;
+    player.useConsumable(inv.itemId);
+    this._updateHUD();
+    if (this.activePanel === 'character') this._drawCharacterPanel();
+  }
 
-  _togglePanel(panelKey) {
-    // Save/Load are actions, not panels
-    if (panelKey === 'save') {
-      this._doSave();
-      return;
-    }
-    if (panelKey === 'load') {
-      this._showPanel('load');
-      return;
-    }
-
-    if (this.activePanel === panelKey) {
+  _toggleCharacterPanel() {
+    if (this.activePanel === 'character') {
       this._closePanel();
     } else {
-      this._showPanel(panelKey);
+      this.activePanel = 'character';
+      this._drawCharacterPanel();
     }
   }
 
@@ -346,435 +390,273 @@ export default class UIScene extends Phaser.Scene {
     this.activePanel = null;
   }
 
-  _showPanel(panelKey) {
-    this._closePanel();
-    this.activePanel = panelKey;
+  _drawCharacterPanel() {
+    this._hideTooltip();
+    this.panelContainer.removeAll(true);
     this.panelContainer.setVisible(true);
+    this.activePanel = 'character';
 
-    switch (panelKey) {
-      case 'inventory':
-        this._drawInventoryPanel();
-        break;
-      case 'equipment':
-        this._drawEquipmentPanel();
-        break;
-      case 'skills':
-        this._drawSkillPanel();
-        break;
-      case 'character':
-        this._drawCharacterPanel();
-        break;
-      case 'load':
-        this._drawLoadPanel();
-        break;
-    }
-  }
-
-  // --- Inventory Panel ---
-  _drawInventoryPanel() {
     const { width, height } = this.cameras.main;
-    const pw = 320;
-    const ph = 400;
+    const usableHeight = height - BOTTOM_UI_HEIGHT;
+    const pw = 880;
+    const ph = Math.min(390, usableHeight - 28);
     const px = (width - pw) / 2;
-    const py = (height - ph) / 2;
-
-    // Panel background
-    const bg = this.add.graphics();
-    bg.fillStyle(0x1a1a2e, 0.95);
-    bg.fillRect(px, py, pw, ph);
-    bg.fillStyle(0x2a2a4e, 1.0);
-    bg.fillRect(px, py, pw, 28);
-    bg.lineStyle(2, 0x4a4a6e);
-    bg.strokeRect(px, py, pw, ph);
-    this.panelContainer.add(bg);
-
-    // Title
-    const title = this.add.text(px + pw / 2, py + 14, '가방 (Inventory)', {
-      fontSize: '13px', fontFamily: 'monospace', color: '#ffcc66',
-    }).setOrigin(0.5);
-    this.panelContainer.add(title);
-
-    // Close button
-    this._addCloseButton(px + pw - 20, py + 14);
-
-    // Grid of items
-    const player = this.worldScene.player;
+    const py = Math.max(12, (usableHeight - ph) / 2);
+    const player = this.worldScene?.player;
     if (!player) return;
 
-    const gridCols = 6;
-    const cellSize = 42;
-    const gridX = px + 15;
-    const gridY = py + 40;
+    const bg = this.add.graphics();
+    bg.fillStyle(0x111722, 0.98);
+    bg.fillRect(px, py, pw, ph);
+    bg.fillStyle(0x202a3c, 1);
+    bg.fillRect(px, py, pw, 30);
+    bg.lineStyle(2, 0x586782, 1);
+    bg.strokeRect(px, py, pw, ph);
+    bg.lineStyle(1, 0x303b52, 1);
+    bg.lineBetween(px + 220, py + 36, px + 220, py + ph - 12);
+    bg.lineBetween(px + 560, py + 36, px + 560, py + ph - 12);
+    this.panelContainer.add(bg);
 
-    player.inventory.forEach((invEntry, idx) => {
-      const itemData = getGameData().items[invEntry.itemId];
-      if (!itemData) return;
+    this._addText(px + 18, py + 9, '캐릭터 관리', 13, '#ffcc66');
+    this._addText(px + 145, py + 10, '장비', 11, '#aab7d5');
+    this._addText(px + 240, py + 10, '인벤토리', 11, '#aab7d5');
+    this._addText(px + 578, py + 10, '능력치', 11, '#aab7d5');
+    this._addCloseButton(px + pw - 20, py + 15);
 
-      const col = idx % gridCols;
-      const row = Math.floor(idx / gridCols);
-      const cx = gridX + col * (cellSize + 4);
-      const cy = gridY + row * (cellSize + 4);
+    const detailBtn = this._addButton(px + pw - 126, py + 7, 88, 18, this.showStatDetails ? '간단 보기' : '상세 보기', () => {
+      this.showStatDetails = !this.showStatDetails;
+      this._drawCharacterPanel();
+    });
+    this.panelContainer.add(detailBtn);
 
-      // Item slot bg
-      const slotBg = this.add.graphics();
-      slotBg.fillStyle(0x222244, 0.8);
-      slotBg.fillRect(cx, cy, cellSize, cellSize);
-      slotBg.lineStyle(1, 0x444466);
-      slotBg.strokeRect(cx, cy, cellSize, cellSize);
-      this.panelContainer.add(slotBg);
+    this._drawEquipmentSection(px + 18, py + 44, player);
+    this._drawInventorySection(px + 236, py + 44, player);
+    this._drawStatsSection(px + 578, py + 44, player);
+  }
 
-      // Item icon - use item-specific icon from data or slot/type-based default
-      const iconKey = getItemIconKey(itemData);
-      const icon = this.add.image(cx + cellSize / 2, cy + cellSize / 2 - 4, iconKey);
-      // Auto-scale to fit within cell (max 36px to leave padding)
-      const maxIconSize = cellSize - 6;
-      const texFrame = icon.frame;
-      const iconW = texFrame.width;
-      const iconH = texFrame.height;
-      const fitScale = Math.min(maxIconSize / iconW, maxIconSize / iconH, 2.5);
-      icon.setScale(fitScale);
-      this.panelContainer.add(icon);
+  _drawEquipmentSection(x, y, player) {
+    this._drawEquipmentFigure(x + 101, y + 152);
 
-      // Quantity
-      if (invEntry.quantity > 1) {
-        const qtyText = this.add.text(cx + cellSize - 3, cy + cellSize - 3, `${invEntry.quantity}`, {
-          fontSize: '9px', fontFamily: 'monospace', color: '#ffffff',
-          stroke: '#000000', strokeThickness: 2,
-        }).setOrigin(1, 1);
-        this.panelContainer.add(qtyText);
-      }
+    const layout = [
+      { slot: 'HELMET', x: 79, y: 0 },
+      { slot: 'NECKLACE', x: 79, y: 47 },
+      { slot: 'ARMOR', x: 79, y: 94 },
+      { slot: 'BELT', x: 79, y: 141 },
+      { slot: 'PANTS', x: 79, y: 188 },
+      { slot: 'SHOES', x: 79, y: 246 },
+      { slot: 'WEAPON', x: 3, y: 68 },
+      { slot: 'SHIELD', x: 155, y: 68 },
+      { slot: 'GLOVES', x: 3, y: 128 },
+      { slot: 'RING_LEFT', x: 3, y: 188 },
+      { slot: 'RING_RIGHT', x: 155, y: 188 },
+      { slot: 'TALISMAN', x: 3, y: 246 },
+      { slot: 'JADE_TOKEN', x: 155, y: 246 },
+    ];
 
-      // Item name below icon
-      const nameText = this.add.text(cx + cellSize / 2, cy + cellSize - 2, itemData.nameKo || itemData.name, {
-        fontSize: '7px', fontFamily: 'monospace', color: '#aaaacc',
-      }).setOrigin(0.5, 1);
-      this.panelContainer.add(nameText);
-
-      // Click to use/equip
-      const zone = this.add.zone(cx + cellSize / 2, cy + cellSize / 2, cellSize, cellSize)
-        .setInteractive();
-      this.panelContainer.add(zone);
-
-      zone.on('pointerdown', () => {
-        if (itemData.type === 'CONSUMABLE') {
-          player.useConsumable(invEntry.itemId);
-          this._showPanel('inventory'); // refresh
-        } else if (itemData.slot) {
-          player.equip(itemData, itemData.slot);
-          this._showPanel('inventory'); // refresh
-        }
-      });
-
-      // Tooltip on hover
-      zone.on('pointerover', () => {
-        this._showTooltip(cx + cellSize + 5, cy, itemData);
-      });
-      zone.on('pointerout', () => {
-        this._hideTooltip();
-      });
+    layout.forEach(({ slot, x: offsetX, y: offsetY }) => {
+      const slotKey = EQUIPMENT_SLOTS[slot]?.key || slot;
+      this._drawEquipmentSlot(x + offsetX, y + offsetY, 44, 38, slotKey, player.equipment[slotKey], player);
     });
   }
 
-  // --- Equipment Panel ---
-  _drawEquipmentPanel() {
-    const { width, height } = this.cameras.main;
-    const pw = 320;
-    const ph = 420;
-    const px = (width - pw) / 2;
-    const py = (height - ph) / 2;
-
-    const bg = this.add.graphics();
-    bg.fillStyle(0x1a1a2e, 0.95);
-    bg.fillRect(px, py, pw, ph);
-    bg.fillStyle(0x2a2a4e, 1.0);
-    bg.fillRect(px, py, pw, 28);
-    bg.lineStyle(2, 0x4a4a6e);
-    bg.strokeRect(px, py, pw, ph);
-    this.panelContainer.add(bg);
-
-    const title = this.add.text(px + pw / 2, py + 14, '장비 (Equipment)', {
-      fontSize: '13px', fontFamily: 'monospace', color: '#ffcc66',
-    }).setOrigin(0.5);
-    this.panelContainer.add(title);
-
-    this._addCloseButton(px + pw - 20, py + 14);
-
-    const player = this.worldScene.player;
-    if (!player) return;
-
-    // Character silhouette (simple)
-    const silGfx = this.add.graphics();
-    const sx = px + pw / 2;
-    const sy = py + 140;
-    // Head
-    silGfx.fillStyle(0x334455, 0.6);
-    silGfx.fillCircle(sx, sy - 40, 15);
-    // Body
-    silGfx.fillRect(sx - 15, sy - 25, 30, 40);
-    // Arms
-    silGfx.fillRect(sx - 30, sy - 20, 15, 35);
-    silGfx.fillRect(sx + 15, sy - 20, 15, 35);
-    // Legs
-    silGfx.fillRect(sx - 12, sy + 15, 10, 30);
-    silGfx.fillRect(sx + 2, sy + 15, 10, 30);
-    this.panelContainer.add(silGfx);
-
-    // Equipment slots around silhouette
-    const slotPositions = {
-      WEAPON: { x: sx - 70, y: sy - 30, label: '무기' },
-      SHIELD: { x: sx + 50, y: sy - 30, label: '방패' },
-      HELMET: { x: sx, y: sy - 70, label: '투구' },
-      ARMOR: { x: sx, y: sy, label: '갑옷' },
-      PANTS: { x: sx, y: sy + 35, label: '하의' },
-      SHOES: { x: sx, y: sy + 60, label: '신발' },
-      GLOVES: { x: sx - 70, y: sy + 10, label: '장갑' },
-      RING_RIGHT: { x: sx + 50, y: sy + 10, label: '반지R' },
-      RING_LEFT: { x: sx - 70, y: sy + 40, label: '반지L' },
-      NECKLACE: { x: sx + 50, y: sy - 60, label: '목걸이' },
-    };
-
-    for (const [slotKey, pos] of Object.entries(slotPositions)) {
-      const equipped = player.equipment[slotKey];
-
-      const slotGfx = this.add.graphics();
-      slotGfx.fillStyle(equipped ? 0x334466 : 0x222233, 0.9);
-      slotGfx.fillRect(pos.x - 20, pos.y - 12, 40, 24);
-      slotGfx.lineStyle(1, equipped ? 0x6688aa : 0x444466);
-      slotGfx.strokeRect(pos.x - 20, pos.y - 12, 40, 24);
-      this.panelContainer.add(slotGfx);
-
-      const label = this.add.text(pos.x, pos.y - 4, equipped ? (equipped.nameKo || equipped.name) : pos.label, {
-        fontSize: '8px', fontFamily: 'monospace',
-        color: equipped ? '#ffffff' : '#666688',
-      }).setOrigin(0.5);
-      this.panelContainer.add(label);
-
-      // Click to unequip
-      if (equipped) {
-        const zone = this.add.zone(pos.x, pos.y, 40, 24).setInteractive();
-        this.panelContainer.add(zone);
-        zone.on('pointerdown', () => {
-          player.unequip(slotKey);
-          this._showPanel('equipment');
-        });
-      }
-    }
-
-    // Stats summary at bottom
-    const computed = player.getComputedStats();
-    const statsText = `ATK: ${computed.ATK}  DEF: ${computed.DEF}  SPD: ${computed.MOVE_SPEED}`;
-    const st = this.add.text(px + pw / 2, py + ph - 30, statsText, {
-      fontSize: '11px', fontFamily: 'monospace', color: '#aaaacc',
-    }).setOrigin(0.5);
-    this.panelContainer.add(st);
+  _drawEquipmentFigure(cx, cy) {
+    const figure = this.add.graphics();
+    figure.fillStyle(0x1a2232, 0.88);
+    figure.lineStyle(2, 0x39465f, 0.85);
+    figure.fillCircle(cx, cy - 94, 18);
+    figure.strokeCircle(cx, cy - 94, 18);
+    figure.fillRoundedRect(cx - 24, cy - 66, 48, 78, 10);
+    figure.strokeRoundedRect(cx - 24, cy - 66, 48, 78, 10);
+    figure.lineStyle(7, 0x273247, 0.82);
+    figure.lineBetween(cx - 30, cy - 50, cx - 54, cy + 18);
+    figure.lineBetween(cx + 30, cy - 50, cx + 54, cy + 18);
+    figure.lineBetween(cx - 13, cy + 10, cx - 28, cy + 78);
+    figure.lineBetween(cx + 13, cy + 10, cx + 28, cy + 78);
+    figure.lineStyle(1, 0x4d5d7a, 0.8);
+    figure.strokeCircle(cx, cy - 94, 9);
+    this.panelContainer.add(figure);
   }
 
-  // --- Skill Panel ---
-  _drawSkillPanel() {
-    const { width, height } = this.cameras.main;
-    const pw = 340;
-    const ph = 420;
-    const px = (width - pw) / 2;
-    const py = (height - ph) / 2;
+  _drawEquipmentSlot(x, y, w, h, slotKey, item, player) {
+    this._drawSlotBox(x, y, w, h, item ? 0x27384f : 0x171d2b);
+    const label = EQUIP_SLOT_LABELS[slotKey] || slotKey;
+    this._addText(x + w / 2, y + 2, label, 7, item ? '#c6d4f2' : '#7f8aa5').setOrigin(0.5, 0);
 
-    const bg = this.add.graphics();
-    bg.fillStyle(0x1a1a2e, 0.95);
-    bg.fillRect(px, py, pw, ph);
-    bg.fillStyle(0x2a2a4e, 1.0);
-    bg.fillRect(px, py, pw, 28);
-    bg.lineStyle(2, 0x4a4a6e);
-    bg.strokeRect(px, py, pw, ph);
-    this.panelContainer.add(bg);
+    if (item) {
+      const iconKey = getItemIconKey(item);
+      const safeIconKey = this.textures.exists(iconKey) ? iconKey : 'icon_armor';
+      const icon = this.add.image(x + w / 2, y + h / 2 + 5, safeIconKey);
+      const frame = icon.frame;
+      icon.setScale(Math.min((w - 12) / frame.width, (h - 15) / frame.height, 2.3));
+      this.panelContainer.add(icon);
+    } else {
+      this._addText(x + w / 2, y + h / 2 + 6, '-', 10, '#505a71').setOrigin(0.5);
+    }
 
-    const title = this.add.text(px + pw / 2, py + 14, '무공 (Skills)', {
-      fontSize: '13px', fontFamily: 'monospace', color: '#ffcc66',
-    }).setOrigin(0.5);
-    this.panelContainer.add(title);
+    const zone = this.add.zone(x + w / 2, y + h / 2, w, h).setInteractive();
+    zone.on('pointerover', () => {
+      if (item) this._showItemTooltip(x + w + 6, y, item);
+    });
+    zone.on('pointerout', () => this._hideTooltip());
+    zone.on('pointerdown', () => {
+      if (!item) return;
+      player.unequip(slotKey);
+      this._drawCharacterPanel();
+    });
+    this.panelContainer.add(zone);
+  }
 
-    this._addCloseButton(px + pw - 20, py + 14);
+  _drawInventorySection(x, y, player) {
+    const cols = 7;
+    const cell = 40;
+    const gap = 6;
+    const items = getGameData().items || {};
+    const maxRows = 7;
+    for (let i = 0; i < cols * maxRows; i++) {
+      const cx = x + (i % cols) * (cell + gap);
+      const cy = y + Math.floor(i / cols) * (cell + gap);
+      const inv = player.inventory[i];
+      const item = inv ? items[inv.itemId] : null;
+      this._drawSlotBox(cx, cy, cell, cell, item ? 0x223048 : 0x151b29);
+      if (!item) continue;
 
-    const player = this.worldScene.player;
-    if (!player) return;
+      const icon = this.add.image(cx + cell / 2, cy + cell / 2 - 2, getItemIconKey(item));
+      const frame = icon.frame;
+      icon.setScale(Math.min((cell - 8) / frame.width, (cell - 8) / frame.height, 2.5));
+      this.panelContainer.add(icon);
 
-    let yOff = py + 40;
-    for (const skillId of player.skills) {
-      const skill = getGameData().skills[skillId];
-      if (!skill) continue;
-
-      // Skill row background
-      const rowBg = this.add.graphics();
-      rowBg.fillStyle(0x222244, 0.6);
-      rowBg.fillRect(px + 10, yOff, pw - 20, 50);
-      rowBg.lineStyle(1, 0x333355);
-      rowBg.strokeRect(px + 10, yOff, pw - 20, 50);
-      this.panelContainer.add(rowBg);
-
-      // Skill name
-      const nameText = this.add.text(px + 18, yOff + 4, `${skill.nameKo || skill.name} (${skill.name})`, {
-        fontSize: '11px', fontFamily: 'monospace', color: '#ffffff',
-      });
-      this.panelContainer.add(nameText);
-
-      // Skill info
-      const info = `MP: ${skill.mpCost || 0}  CD: ${((skill.cooldown || 0) / 1000).toFixed(1)}s  ${skill.category || ''}`;
-      const infoText = this.add.text(px + 18, yOff + 18, info, {
-        fontSize: '9px', fontFamily: 'monospace', color: '#888899',
-      });
-      this.panelContainer.add(infoText);
-
-      // Proficiency bar
-      if (this.worldScene.proficiencySystem) {
-        const profSys = this.worldScene.proficiencySystem;
-        const profLevel = profSys.getProficiencyLevel('skill', skillId);
-        const profProgress = profSys.getProgress('skill', skillId);
-        const profExp = profSys.getProficiencyExp('skill', skillId);
-
-        // Bar background
-        const barGfx = this.add.graphics();
-        const barX = px + 18;
-        const barY = yOff + 34;
-        const barW = pw - 60;
-        barGfx.fillStyle(0x111122, 0.8);
-        barGfx.fillRect(barX, barY, barW, 8);
-        barGfx.fillStyle(0x6644aa, 0.8);
-        barGfx.fillRect(barX, barY, barW * profProgress, 8);
-        this.panelContainer.add(barGfx);
-
-        const profLabel = this.add.text(barX + barW + 4, barY - 1, profLevel.nameKo, {
-          fontSize: '8px', fontFamily: 'monospace', color: '#aa88ff',
-        });
-        this.panelContainer.add(profLabel);
+      if (inv.quantity > 1) {
+        this._addText(cx + cell - 4, cy + cell - 13, String(inv.quantity), 9, '#ffffff').setOrigin(1, 0);
       }
 
-      yOff += 56;
-      if (yOff > py + ph - 40) break;
-    }
-  }
-
-  // --- Character Info Panel ---
-  _drawCharacterPanel() {
-    const { width, height } = this.cameras.main;
-    const pw = 280;
-    const ph = 420;
-    const px = (width - pw) / 2;
-    const py = (height - ph) / 2;
-
-    const bg = this.add.graphics();
-    bg.fillStyle(0x1a1a2e, 0.95);
-    bg.fillRect(px, py, pw, ph);
-    bg.fillStyle(0x2a2a4e, 1.0);
-    bg.fillRect(px, py, pw, 28);
-    bg.lineStyle(2, 0x4a4a6e);
-    bg.strokeRect(px, py, pw, ph);
-    this.panelContainer.add(bg);
-
-    const title = this.add.text(px + pw / 2, py + 14, '정보 (Character)', {
-      fontSize: '13px', fontFamily: 'monospace', color: '#ffcc66',
-    }).setOrigin(0.5);
-    this.panelContainer.add(title);
-
-    this._addCloseButton(px + pw - 20, py + 14);
-
-    const player = this.worldScene.player;
-    if (!player) return;
-
-    const computed = player.getComputedStats();
-    const statLines = [
-      `Level: ${computed.level}`,
-      `EXP: ${computed.exp} / ${getExpForLevel(computed.level)}`,
-      `Gold: ${computed.gold}`,
-      '',
-      `--- 기본 능력치 ---`,
-      `HP:  ${computed.HP} / ${computed.maxHP}`,
-      `MP:  ${computed.MP} / ${computed.maxMP}`,
-      `STR (근력): ${computed.STR}`,
-      `AGI (민첩): ${computed.AGI}`,
-      `INT (지력): ${computed.INT}`,
-      `LUK (운):   ${computed.LUK}`,
-      '',
-      `--- 전투 능력치 ---`,
-      `ATK (공격력): ${computed.ATK}`,
-      `DEF (방어력): ${computed.DEF}`,
-      `ACCURACY (명중): ${computed.ACCURACY}%`,
-      `EVASION (회피): ${computed.EVASION}%`,
-      `CRIT Rate: ${computed.CRIT_RATE}%`,
-      `CRIT DMG:  ${computed.CRIT_DMG}%`,
-      '',
-      `--- 피해 증감 ---`,
-      `피해 증가: ${computed.DMG_BONUS || 0}%`,
-      `받는 피해: ${computed.DMG_TAKEN || 0}%`,
-      '',
-      `--- 회복 ---`,
-      `HP 회복: ${computed.HP_REGEN || 0}/2초`,
-      `MP 회복: ${computed.MP_REGEN || 0}/2초`,
-      '',
-      `--- 이동 ---`,
-      `MOVE_SPEED: ${computed.MOVE_SPEED}`,
-    ];
-
-    let yOff = py + 38;
-    for (const line of statLines) {
-      const color = line.startsWith('---') ? '#ffcc66' : '#ccccee';
-      const text = this.add.text(px + 16, yOff, line, {
-        fontSize: '11px', fontFamily: 'monospace', color,
+      const zone = this.add.zone(cx + cell / 2, cy + cell / 2, cell, cell).setInteractive();
+      zone.on('pointerover', () => this._showItemTooltip(cx + cell + 4, cy, item));
+      zone.on('pointerout', () => this._hideTooltip());
+      zone.on('pointerdown', () => {
+        if (item.type === 'CONSUMABLE') {
+          player.useConsumable(inv.itemId);
+        } else if (item.slot) {
+          player.equip(item, item.slot);
+        }
+        this._drawCharacterPanel();
       });
-      this.panelContainer.add(text);
-      yOff += 16;
+      this.panelContainer.add(zone);
     }
   }
 
-  // ==========================================================================
-  // Tooltip
-  // ==========================================================================
+  _drawStatsSection(x, y, player) {
+    const stats = player.getComputedStats();
+    this._addText(x, y, `Lv.${stats.level}  EXP ${stats.exp}/${getExpForLevel(stats.level)}`, 11, '#ffffff');
+    this._addText(x, y + 18, `Gold ${stats.gold}`, 10, '#ffd166');
 
-  _showTooltip(x, y, itemData) {
+    const list = this.showStatDetails ? STAT_DETAILS : STAT_SUMMARY;
+    let cy = y + 46;
+    for (const stat of list) {
+      const value = stats[stat] ?? 0;
+      this._addText(x, cy, stat, 10, '#9aa4bd');
+      this._addText(x + 130, cy, String(Math.floor(value)), 10, '#ffffff');
+      cy += 18;
+      if (cy > y + 315) break;
+    }
+
+    if (!this.showStatDetails) {
+      this._addText(x, y + 180, '상세 보기에서 명중/회피/크리/회복 등 전체 능력치를 확인할 수 있습니다.', 9, '#7f8aa5', 260);
+    }
+  }
+
+  _drawSlotBox(x, y, w, h, fill) {
+    const gfx = this.add.graphics();
+    gfx.fillStyle(fill, 0.96);
+    gfx.fillRect(x, y, w, h);
+    gfx.lineStyle(1, 0x44516b, 1);
+    gfx.strokeRect(x, y, w, h);
+    this.panelContainer.add(gfx);
+    return gfx;
+  }
+
+  _addButton(x, y, w, h, label, callback) {
+    const c = this.add.container(0, 0);
+    const bg = this.add.graphics();
+    bg.fillStyle(0x2b3952, 0.95);
+    bg.fillRect(x, y, w, h);
+    bg.lineStyle(1, 0x64738f, 1);
+    bg.strokeRect(x, y, w, h);
+    c.add(bg);
+    c.add(this.add.text(x + w / 2, y + h / 2, label, {
+      fontSize: '9px',
+      fontFamily: 'monospace',
+      color: '#ffffff',
+    }).setOrigin(0.5));
+    const zone = this.add.zone(x + w / 2, y + h / 2, w, h).setInteractive();
+    zone.on('pointerover', () => bg.setAlpha(0.75));
+    zone.on('pointerout', () => bg.setAlpha(1));
+    zone.on('pointerdown', callback);
+    c.add(zone);
+    return c;
+  }
+
+  _addText(x, y, text, size = 10, color = '#ffffff', wrapWidth = null) {
+    const obj = this.add.text(x, y, text, {
+      fontSize: `${size}px`,
+      fontFamily: 'monospace',
+      color,
+      wordWrap: wrapWidth ? { width: wrapWidth } : undefined,
+    });
+    this.panelContainer.add(obj);
+    return obj;
+  }
+
+  _addCloseButton(x, y) {
+    const close = this.add.text(x, y, 'X', {
+      fontSize: '14px',
+      fontFamily: 'monospace',
+      color: '#ff7777',
+      stroke: '#000000',
+      strokeThickness: 2,
+    }).setOrigin(0.5).setInteractive();
+    close.on('pointerdown', () => this._closePanel());
+    close.on('pointerover', () => close.setColor('#ffaaaa'));
+    close.on('pointerout', () => close.setColor('#ff7777'));
+    this.panelContainer.add(close);
+  }
+
+  _showItemTooltip(x, y, item) {
     this._hideTooltip();
-
-    const { width, height } = this.cameras.main;
-    const tipW = 180;
     const lines = [
-      itemData.nameKo || itemData.name,
-      itemData.name || '',
-      `등급: ${getRarityDisplay(itemData.rarity)}`,
-      itemData.description || '',
+      item.nameKo || item.name || item.id,
+      item.description || '',
+      `등급: ${getRarityDisplay(item.rarity)}`,
     ];
-
-    // Show weapon base stats
-    if (itemData.baseATK) lines.push(`  공격력: ${itemData.baseATK}`);
-    if (itemData.baseATK_SPEED) lines.push(`  공격속도: ${itemData.baseATK_SPEED}`);
-    if (itemData.baseRange) lines.push(`  사정거리: ${itemData.baseRange}`);
-    // Show armor base DEF
-    if (itemData.baseDEF) lines.push(`  방어력: ${itemData.baseDEF}`);
-
-    if (itemData.stats && Object.keys(itemData.stats).length > 0) {
-      lines.push('  --- 추가 옵션 ---');
-      for (const [stat, val] of Object.entries(itemData.stats)) {
-        const sign = val >= 0 ? '+' : '';
-        lines.push(`  ${stat}: ${sign}${val}`);
+    if (item.baseATK) lines.push(`공격력 +${item.baseATK}`);
+    if (item.baseDEF) lines.push(`방어력 +${item.baseDEF}`);
+    if (item.stats) {
+      for (const [stat, value] of Object.entries(item.stats)) {
+        lines.push(`${stat} ${value >= 0 ? '+' : ''}${value}`);
       }
     }
 
-    const tipH = lines.length * 14 + 12;
-
-    // Clamp tooltip within screen bounds
-    if (x + tipW > width) x = x - tipW - 50;
-    if (y + tipH > height) y = height - tipH - 10;
-
-    this.tooltipContainer = this.add.container(0, 0).setDepth(3000);
+    const { width, height } = this.cameras.main;
+    const tipW = 210;
+    const tipH = Math.max(64, lines.length * 15 + 14);
+    const maxY = height - BOTTOM_UI_HEIGHT - tipH - 8;
+    const tx = Math.min(x, width - tipW - 8);
+    const ty = Math.max(8, Math.min(y, maxY));
+    this.tooltipContainer = this.add.container(0, 0).setDepth(4000);
 
     const bg = this.add.graphics();
-    bg.fillStyle(0x111122, 0.95);
-    bg.fillRect(x, y, tipW, tipH);
-    bg.lineStyle(1, 0x4a4a6e);
-    bg.strokeRect(x, y, tipW, tipH);
+    bg.fillStyle(0x080b12, 0.97);
+    bg.fillRect(tx, ty, tipW, tipH);
+    bg.lineStyle(1, 0x697996, 1);
+    bg.strokeRect(tx, ty, tipW, tipH);
     this.tooltipContainer.add(bg);
 
-    lines.forEach((line, i) => {
-      const color = i === 0 ? '#ffffff' : '#aaaacc';
-      const text = this.add.text(x + 6, y + 6 + i * 14, line, {
-        fontSize: '9px', fontFamily: 'monospace', color,
-      });
-      this.tooltipContainer.add(text);
+    lines.forEach((line, idx) => {
+      this.tooltipContainer.add(this.add.text(tx + 8, ty + 8 + idx * 15, line, {
+        fontSize: idx === 0 ? '11px' : '9px',
+        fontFamily: 'monospace',
+        color: idx === 0 ? '#ffffff' : '#b8c0d6',
+        wordWrap: { width: tipW - 16 },
+      }));
     });
   }
 
@@ -785,135 +667,84 @@ export default class UIScene extends Phaser.Scene {
     }
   }
 
-  // ==========================================================================
-  // Close Button helper
-  // ==========================================================================
-
-  _addCloseButton(x, y) {
-    const closeBtn = this.add.text(x, y, 'X', {
-      fontSize: '14px', fontFamily: 'monospace', color: '#ff6666',
-      stroke: '#000000', strokeThickness: 1,
-    }).setOrigin(0.5).setInteractive();
-    this.panelContainer.add(closeBtn);
-
-    closeBtn.on('pointerdown', () => this._closePanel());
-    closeBtn.on('pointerover', () => closeBtn.setColor('#ff9999'));
-    closeBtn.on('pointerout', () => closeBtn.setColor('#ff6666'));
-  }
-
-  // ==========================================================================
-  // HUD Updates
-  // ==========================================================================
-
   _updateHUD() {
-    const player = this.worldScene && this.worldScene.player;
+    const player = this.worldScene?.player;
     if (!player) return;
-
     const stats = player.stats;
-
-    // Bars
-    this._updateBar('hp', stats.HP, stats.maxHP);
-    this._updateBar('mp', stats.MP, stats.maxMP);
-    this._updateBar('exp', stats.exp, getExpForLevel(stats.level));
-
-    // Level
+    this._updateBar(this.hpBar, stats.HP, stats.maxHP);
+    this._updateBar(this.mpBar, stats.MP, stats.maxMP);
+    this._updateBar(this.expBar, stats.exp, getExpForLevel(stats.level), (current, max) => `${Math.floor(current || 0)} / ${Math.floor(max || 1)}`);
     this.levelText.setText(`Lv. ${stats.level}`);
+    this.goldText.setText(`Gold ${stats.gold || 0}`);
+    this._updateSkillSlots();
+    this._updateQuickItems();
 
-    // Gold
-    this.goldText.setText(`Gold: ${stats.gold}`);
-
-    // Proficiency
     const weapon = player.equipment.WEAPON;
-    if (weapon && weapon.weaponType && this.worldScene.proficiencySystem) {
-      const profSys = this.worldScene.proficiencySystem;
-      const profLevel = profSys.getProficiencyLevel('weapon', weapon.weaponType);
-      const bonuses = profSys.getWeaponProfBonuses(weapon.weaponType);
-      const weaponTypeNames = { SWORD:'검', BLADE:'도', SPEAR:'창', STAFF:'봉', HIDDEN:'암기', WHIP:'편', FIST:'권', EXOTIC:'기문' };
-      const typeName = weaponTypeNames[weapon.weaponType] || weapon.weaponType;
-      this.profText.setText(`${typeName} 숙련: ${profLevel.nameKo} (피해+${bonuses.dmgBonus}% 크리+${bonuses.critRateBonus}%)`);
+    if (weapon && this.worldScene?.proficiencySystem) {
+      const type = weapon.weaponType || 'SWORD';
+      const prof = this.worldScene.proficiencySystem.getProficiencyLevel('weapon', type);
+      this.profText.setText(`숙련 ${prof.nameKo || prof.key}`);
     } else {
-      this.profText.setText('');
+      this.profText.setText('숙련 -');
     }
-  }
-
-  _updateExpBar(exp, expNeeded) {
-    this._updateBar('exp', exp, expNeeded);
-  }
-
-  _onLevelUp(newLevel) {
-    // Show level-up notification
-    const { width, height } = this.cameras.main;
-    const text = this.add.text(width / 2, height / 2 - 100, `레벨 업! Lv.${newLevel}`, {
-      fontSize: '24px', fontFamily: 'serif', color: '#ffcc00',
-      stroke: '#000000', strokeThickness: 4,
-    }).setOrigin(0.5).setDepth(5000);
-
-    this.tweens.add({
-      targets: text,
-      y: height / 2 - 140,
-      alpha: 0,
-      duration: 2000,
-      ease: 'Power2',
-      onComplete: () => text.destroy(),
-    });
-
-    this._updateHUD();
   }
 
   _onInventoryChanged() {
-    if (this.activePanel === 'inventory') {
-      this._showPanel('inventory');
-    }
     this._updateHUD();
+    if (this.activePanel === 'character') this._drawCharacterPanel();
   }
 
   _onEquipmentChanged() {
-    if (this.activePanel === 'equipment') {
-      this._showPanel('equipment');
-    }
+    this._updateHUD();
+    if (this.activePanel === 'character') this._drawCharacterPanel();
+  }
+
+  _onLevelUp(newLevel) {
+    this._showNotification(`레벨 업! Lv.${newLevel}`, '#ffcc66');
     this._updateHUD();
   }
 
   _onProfLevelUp(data) {
-    const { width, height } = this.cameras.main;
-    const text = this.add.text(width / 2, height / 2 - 60,
-      `숙련도 상승! ${data.id}: ${data.newLevel.nameKo}`, {
-      fontSize: '16px', fontFamily: 'monospace', color: '#aa88ff',
-      stroke: '#000000', strokeThickness: 3,
-    }).setOrigin(0.5).setDepth(5000);
+    this._showNotification(`숙련도 상승: ${data.newLevel?.nameKo || ''}`, '#aa88ff');
+  }
 
+  _showNotification(message, color = '#ffffff') {
+    const { width, height } = this.cameras.main;
+    const y = (height - BOTTOM_UI_HEIGHT) / 2;
+    const text = this.add.text(width / 2, y, message, {
+      fontSize: '18px',
+      fontFamily: 'monospace',
+      color,
+      stroke: '#000000',
+      strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(5000);
     this.tweens.add({
       targets: text,
-      y: height / 2 - 100,
+      y: y - 36,
       alpha: 0,
-      duration: 2000,
+      duration: 1600,
+      ease: 'Power2',
       onComplete: () => text.destroy(),
     });
   }
 
-  // ==========================================================================
-  // Save / Load
-  // ==========================================================================
-
   _doSave() {
     const ws = this.worldScene;
-    if (!ws || !ws.player) return;
-    const mapId = ws.mapId || 'field_01';
-    const ok = this.saveSystem.save(ws.player, mapId, ws.proficiencySystem);
-    this._showSaveNotification(ok ? '저장 완료!' : '저장 실패!', ok);
+    if (!ws?.player) return;
+    const ok = this.saveSystem.save(ws.player, ws.mapId || 'field_01', ws.proficiencySystem);
+    this._showNotification(ok ? '저장 완료' : '저장 실패', ok ? '#44ff88' : '#ff6666');
   }
 
   _doAutoSave() {
     const ws = this.worldScene;
-    if (!ws || !ws.player) return;
-    const mapId = ws.mapId || 'field_01';
-    this.saveSystem.autoSave(ws.player, mapId, ws.proficiencySystem);
+    if (!ws?.player) return;
+    this.saveSystem.autoSave(ws.player, ws.mapId || 'field_01', ws.proficiencySystem);
   }
 
   _doLoadLast() {
     const data = this.saveSystem.load();
     if (!data) {
-      this._showSaveNotification('저장 데이터가 없습니다!', false);
+      this._showNotification('저장 데이터가 없습니다', '#ff7777');
       return;
     }
     this._applyLoadData(data);
@@ -921,161 +752,24 @@ export default class UIScene extends Phaser.Scene {
 
   _applyLoadData(data) {
     const ws = this.worldScene;
-    if (!ws || !ws.player) return;
-
-    // Apply player data
-    Object.assign(ws.player.stats, data.player.stats);
-    ws.player.equipment = { ...ws.player.equipment, ...data.player.equipment };
-    ws.player.inventory = data.player.inventory.map(e => ({ ...e }));
-    ws.player.skills = [...data.player.skills];
-    ws.player.skillSlots = [...data.player.skillSlots];
+    if (!ws?.player || !data?.player) return;
+    Object.assign(ws.player.stats, data.player.stats || {});
+    ws.player.equipment = { ...ws.player.equipment, ...(data.player.equipment || {}) };
+    ws.player.inventory = Array.isArray(data.player.inventory) ? data.player.inventory.map(entry => ({ ...entry })) : [];
+    ws.player.skills = Array.isArray(data.player.skills) ? [...data.player.skills] : ws.player.skills;
+    ws.player.skillSlots = Array.isArray(data.player.skillSlots) ? [...data.player.skillSlots] : ws.player.skillSlots;
     ws.player.skillCooldowns = {};
     ws.player.buffs = [];
     ws.player.channelEffects = {};
     ws.player.activeSkillEffects = {};
-
-    // Apply proficiency
-    if (ws.proficiencySystem && data.proficiency) {
-      ws.proficiencySystem.fromJSON(data.proficiency);
-    }
-
-    // Reposition player
-    if (data.map) {
-      ws.player.setPosition(data.map.x, data.map.y);
-    }
-
-    // Refresh equipment visuals
+    if (ws.proficiencySystem && data.proficiency) ws.proficiencySystem.fromJSON(data.proficiency);
+    if (data.map) ws.player.setPosition(data.map.x, data.map.y);
     ws.player._updateEquipmentVisuals();
-
     ws.events.emit('player-stats-changed');
-    this._showSaveNotification('불러오기 완료!', true);
-
-    // If different map, transition
-    if (data.map && data.map.id && data.map.id !== (ws.mapId || 'field_01')) {
-      // For simplicity, reload current scene with player data
-      // Full map transition would require MapTransitionSystem
-    }
+    this._showNotification('불러오기 완료', '#44ff88');
   }
 
-  _drawLoadPanel() {
-    const { width, height } = this.cameras.main;
-    const pw = 300;
-    const ph = 280;
-    const px = (width - pw) / 2;
-    const py = (height - ph) / 2;
-
-    const bg = this.add.graphics();
-    bg.fillStyle(0x1a1a2e, 0.95);
-    bg.fillRect(px, py, pw, ph);
-    bg.fillStyle(0x2a2a4e, 1.0);
-    bg.fillRect(px, py, pw, 28);
-    bg.lineStyle(2, 0x4a4a6e);
-    bg.strokeRect(px, py, pw, ph);
-    this.panelContainer.add(bg);
-
-    const title = this.add.text(px + pw / 2, py + 14, '저장 / 불러오기', {
-      fontSize: '13px', fontFamily: 'monospace', color: '#ffcc66',
-    }).setOrigin(0.5);
-    this.panelContainer.add(title);
-    this._addCloseButton(px + pw - 20, py + 14);
-
-    let yOff = py + 45;
-    const btnW = pw - 40;
-    const btnH = 32;
-
-    const createBtn = (label, color, callback) => {
-      const btnBg = this.add.graphics();
-      btnBg.fillStyle(color, 0.9);
-      btnBg.fillRect(px + 20, yOff, btnW, btnH);
-      btnBg.lineStyle(1, 0x6a6a9e);
-      btnBg.strokeRect(px + 20, yOff, btnW, btnH);
-      this.panelContainer.add(btnBg);
-
-      const btnText = this.add.text(px + 20 + btnW / 2, yOff + btnH / 2, label, {
-        fontSize: '12px', fontFamily: 'monospace', color: '#ffffff',
-      }).setOrigin(0.5);
-      this.panelContainer.add(btnText);
-
-      const zone = this.add.zone(px + 20 + btnW / 2, yOff + btnH / 2, btnW, btnH)
-        .setInteractive().setDepth(3001);
-      this.panelContainer.add(zone);
-
-      zone.on('pointerover', () => { btnBg.setAlpha(0.7); });
-      zone.on('pointerout', () => { btnBg.setAlpha(1); });
-      zone.on('pointerdown', () => { callback(); this._closePanel(); });
-
-      yOff += btnH + 8;
-    };
-
-    // Save info
-    const hasSave = this.saveSystem.hasSave();
-    const hasAuto = this.saveSystem.hasAutoSave();
-    const infoText = this.add.text(px + 20, yOff,
-      `수동 저장: ${hasSave ? '있음' : '없음'}  |  자동 저장: ${hasAuto ? '있음' : '없음'}`, {
-      fontSize: '10px', fontFamily: 'monospace', color: '#888899',
-    });
-    this.panelContainer.add(infoText);
-    yOff += 20;
-
-    const playTime = this.add.text(px + 20, yOff,
-      `플레이 시간: ${this.saveSystem.getPlayTime()}`, {
-      fontSize: '10px', fontFamily: 'monospace', color: '#888899',
-    });
-    this.panelContainer.add(playTime);
-    yOff += 24;
-
-    createBtn('💾 저장하기 (F5)', 0x2a4a2e, () => this._doSave());
-    createBtn('📂 불러오기 (F9)', 0x2a2a4e, () => this._doLoadLast());
-
-    if (hasAuto) {
-      createBtn('🔄 자동저장 불러오기', 0x3a3a2e, () => {
-        const data = this.saveSystem.load('murimAdventure_autosave');
-        if (data) this._applyLoadData(data);
-        else this._showSaveNotification('자동저장 데이터 없음!', false);
-      });
-    }
-
-    createBtn('📥 파일로 내보내기', 0x2a3a4e, () => {
-      const ws = this.worldScene;
-      if (ws && ws.player) {
-        this.saveSystem.exportToFile(ws.player, ws.mapId || 'field_01', ws.proficiencySystem);
-      }
-    });
-
-    createBtn('📤 파일에서 가져오기', 0x4a2a2e, () => {
-      this.saveSystem.importFromFile().then((data) => {
-        if (data) {
-          this._applyLoadData(data);
-        } else {
-          this._showSaveNotification('가져오기 실패!', false);
-        }
-      });
-    });
-  }
-
-  _showSaveNotification(msg, success) {
-    const { width } = this.cameras.main;
-    const color = success ? '#44ff88' : '#ff6666';
-    const text = this.add.text(width / 2, 120, msg, {
-      fontSize: '16px', fontFamily: 'monospace', color,
-      stroke: '#000000', strokeThickness: 3,
-    }).setOrigin(0.5).setDepth(5000);
-
-    this.tweens.add({
-      targets: text,
-      y: 90,
-      alpha: 0,
-      duration: 1500,
-      ease: 'Power2',
-      onComplete: () => text.destroy(),
-    });
-  }
-
-  // ==========================================================================
-  // Update
-  // ==========================================================================
-
-  update(time, delta) {
+  update() {
     this._updateSkillSlots();
   }
 }

@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { STATS, AI_BEHAVIOR } from '../../data/constants.js';
+import { bindSpriteSelect, spriteSelectHtml } from '../components/SpriteSelect.js';
 
 export class MonsterEditor {
   constructor(dataManager) {
@@ -122,6 +123,7 @@ export class MonsterEditor {
 
     const itemIds = Object.keys(this.dm.data.items || {});
     const dropRows = mon.drops.map((drop, i) => this._dropRowHtml(drop, i, itemIds)).join('');
+    const impactConfigJson = mon.impactConfig ? JSON.stringify(mon.impactConfig, null, 2) : '';
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -157,13 +159,16 @@ export class MonsterEditor {
           <div class="form-row">
             <div class="form-group" style="flex:2;">
               <label>스프라이트 키</label>
-              <input type="text" id="editMonSprite" value="${mon.spriteKey || mon.sprite || ''}" list="monSpriteList" placeholder="예: monster_box">
-              <datalist id="monSpriteList">
-                ${this._getMonsterSpriteOptions()}
-              </datalist>
+              ${spriteSelectHtml({ id: 'editMonSprite', value: mon.spriteKey || mon.sprite || '', placeholder: '몬스터 스프라이트 검색...' })}
               <small style="color:var(--text-dim);font-size:10px;">스프라이트 에디터에서 커스텀 몬스터 스프라이트를 생성할 수 있습니다</small>
             </div>
             <div class="form-group"><label>틴트 (hex)</label><input type="text" id="editMonTint" value="${typeof mon.tint === 'number' ? '0x' + mon.tint.toString(16) : mon.tint || ''}"></div>
+          </div>
+
+          <h4 style="color:var(--gold);font-size:13px;margin:16px 0 8px;">공격/피격 연출 JSON</h4>
+          <div class="form-group">
+            <textarea id="editMonImpactConfig" style="min-height:120px;font-family:monospace;font-size:12px;" placeholder='{"receiveHitEffect":{"flashColor":16711680,"particleCount":4}}'>${impactConfigJson}</textarea>
+            <small style="color:var(--text-dim);font-size:10px;">몬스터가 플레이어를 공격했을 때 플레이어가 받는 피격 플래시/파티클/화면 흔들림을 관리합니다.</small>
           </div>
 
           <h4 style="color:var(--gold);font-size:13px;margin:16px 0 8px;">드롭 테이블</h4>
@@ -180,6 +185,7 @@ export class MonsterEditor {
     document.body.appendChild(overlay);
     overlay.querySelectorAll('.modal-close-btn').forEach(b => b.onclick = () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    bindSpriteSelect(overlay, 'editMonSprite');
 
     // Add drop
     overlay.querySelector('#addDropBtn').onclick = () => {
@@ -216,6 +222,12 @@ export class MonsterEditor {
         if (isNaN(tint)) tint = 0xffffff;
       }
 
+      let impactConfig = null;
+      const impactConfigText = overlay.querySelector('#editMonImpactConfig').value.trim();
+      if (impactConfigText) {
+        try { impactConfig = JSON.parse(impactConfigText); } catch (e) { window.showToast('공격/피격 연출 JSON 형식 오류', 'error'); return; }
+      }
+
       const saved = {
         id,
         name: overlay.querySelector('#editMonName').value.trim(),
@@ -233,6 +245,7 @@ export class MonsterEditor {
         drops,
         spriteKey: overlay.querySelector('#editMonSprite').value.trim(),
         tint,
+        impactConfig,
       };
 
       if (!isNew) delete this.dm.data.monsters[monsterId];

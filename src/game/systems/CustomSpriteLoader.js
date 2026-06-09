@@ -4,9 +4,20 @@
 
 export default class CustomSpriteLoader {
   static STORAGE_KEY = 'murimAdventure_customSprites';
+  static WORKSPACE_VERSION_KEY = 'murimAdventure_spriteWorkspaceVersion';
+  static WORKSPACE_VERSION = '960-32x64-v1';
+
+  static ensureWorkspaceVersion() {
+    try {
+      if (localStorage.getItem(this.WORKSPACE_VERSION_KEY) === this.WORKSPACE_VERSION) return;
+      localStorage.removeItem(this.STORAGE_KEY);
+      localStorage.setItem(this.WORKSPACE_VERSION_KEY, this.WORKSPACE_VERSION);
+    } catch {}
+  }
 
   static getCustomSprites() {
     try {
+      this.ensureWorkspaceVersion();
       return JSON.parse(localStorage.getItem(this.STORAGE_KEY) || '{}');
     } catch { return {}; }
   }
@@ -54,14 +65,19 @@ export default class CustomSpriteLoader {
           try {
             const fw = Number(data.frameWidth) || img.width;
             const fh = Number(data.frameHeight) || img.height;
-            const isSheet = fw > 0 && fh > 0 && (img.width > fw || img.height > fh);
+            const logicalFw = Number(data.logicalFrameWidth) || fw;
+            const logicalFh = Number(data.logicalFrameHeight) || fh;
+            const sourceFrames = Math.max(1, fw > 0 ? Math.floor(img.width / fw) : 1);
+            const needsScaleForGame = logicalFw > 0 && logicalFh > 0 && (logicalFw !== fw || logicalFh !== fh);
 
-            if (fw <= 0 || fh <= 0 || img.width < fw || img.height < fh) {
+            if (fw <= 0 || fh <= 0 || logicalFw <= 0 || logicalFh <= 0 || img.width < fw || img.height < fh) {
               console.warn(`[CustomSpriteLoader] Skipping invalid sprite ${key}`, {
                 width: img.width,
                 height: img.height,
                 frameWidth: data.frameWidth,
                 frameHeight: data.frameHeight,
+                logicalFrameWidth: data.logicalFrameWidth,
+                logicalFrameHeight: data.logicalFrameHeight,
               });
               return;
             }
@@ -71,13 +87,44 @@ export default class CustomSpriteLoader {
               scene.textures.remove(key);
             }
 
+            let textureImage = img;
+            let textureFrameWidth = fw;
+            let textureFrameHeight = fh;
+
+            if (needsScaleForGame) {
+              const canvas = document.createElement('canvas');
+              canvas.width = logicalFw * sourceFrames;
+              canvas.height = logicalFh;
+              const ctx = canvas.getContext('2d');
+              ctx.imageSmoothingEnabled = false;
+
+              for (let frame = 0; frame < sourceFrames; frame++) {
+                ctx.drawImage(
+                  img,
+                  frame * fw,
+                  0,
+                  fw,
+                  fh,
+                  frame * logicalFw,
+                  0,
+                  logicalFw,
+                  logicalFh
+                );
+              }
+
+              textureImage = canvas;
+              textureFrameWidth = logicalFw;
+              textureFrameHeight = logicalFh;
+            }
+
+            const isSheet = sourceFrames > 1 || textureImage.width > textureFrameWidth || textureImage.height > textureFrameHeight;
             if (isSheet) {
-              scene.textures.addSpriteSheet(key, img, {
-                frameWidth: fw,
-                frameHeight: fh,
+              scene.textures.addSpriteSheet(key, textureImage, {
+                frameWidth: textureFrameWidth,
+                frameHeight: textureFrameHeight,
               });
             } else {
-              scene.textures.addImage(key, img);
+              scene.textures.addImage(key, textureImage);
             }
           } catch (error) {
             console.warn(`[CustomSpriteLoader] Failed to load custom sprite: ${key}`, error);

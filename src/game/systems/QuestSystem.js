@@ -2,7 +2,14 @@
 // QuestSystem.js - Quest tracking and progression
 // =============================================================================
 
-import { QUESTS_BY_ID } from '../data/questData.js';
+import { getGameData } from '../../data/GameDataLoader.js';
+
+function getQuestTemplate(questId) {
+  const quests = getGameData().quests || [];
+  return Array.isArray(quests)
+    ? quests.find(quest => quest.id === questId)
+    : quests[questId];
+}
 
 export default class QuestSystem {
   /**
@@ -32,7 +39,7 @@ export default class QuestSystem {
     if (this.getActiveQuest(questId)) return false;
     if (this.isQuestCompleted(questId)) return false;
 
-    const template = QUESTS_BY_ID[questId];
+    const template = getQuestTemplate(questId);
     if (!template) return false;
 
     // Deep copy objectives so current progress is tracked independently
@@ -213,7 +220,7 @@ export default class QuestSystem {
     this.activeQuests = [];
     if (data.activeQuests) {
       for (const saved of data.activeQuests) {
-        const template = QUESTS_BY_ID[saved.id];
+        const template = getQuestTemplate(saved.id);
         if (!template) continue;
 
         const quest = {

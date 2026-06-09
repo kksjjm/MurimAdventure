@@ -7,6 +7,7 @@ import { ItemEditor } from './editors/ItemEditor.js';
 import { SkillEditor } from './editors/SkillEditor.js';
 import { CharacterEditor } from './editors/CharacterEditor.js';
 import { MonsterEditor } from './editors/MonsterEditor.js';
+import { NpcEditor } from './editors/NpcEditor.js';
 import { MapEditor } from './editors/MapEditor.js';
 import { QuestEditor } from './editors/QuestEditor.js';
 import { EventEditor } from './editors/EventEditor.js';
@@ -85,6 +86,7 @@ class AdminApp {
       skills: new SkillEditor(this.dataManager),
       character: new CharacterEditor(this.dataManager),
       monsters: new MonsterEditor(this.dataManager),
+      npcs: new NpcEditor(this.dataManager),
       maps: new MapEditor(this.dataManager),
       sprites: new SpriteEditor(this.dataManager),
       quests: new QuestEditor(this.dataManager),
@@ -133,6 +135,7 @@ class AdminApp {
     const itemCount = Object.keys(data.items || {}).length;
     const skillCount = Object.keys(data.skills || {}).length;
     const monsterCount = Object.keys(data.monsters || {}).length;
+    const npcCount = Object.keys(data.npcs || {}).length;
     const mapCount = (data.maps || []).length;
     const questCount = (data.quests || []).length;
     const eventCount = (data.events || []).length;
@@ -147,6 +150,7 @@ class AdminApp {
         <div class="stat-card"><div class="stat-value">${itemCount}</div><div class="stat-label">아이템</div></div>
         <div class="stat-card"><div class="stat-value">${skillCount}</div><div class="stat-label">스킬</div></div>
         <div class="stat-card"><div class="stat-value">${monsterCount}</div><div class="stat-label">몬스터</div></div>
+        <div class="stat-card"><div class="stat-value">${npcCount}</div><div class="stat-label">NPC</div></div>
         <div class="stat-card"><div class="stat-value">${mapCount}</div><div class="stat-label">맵</div></div>
         <div class="stat-card"><div class="stat-value">${questCount}</div><div class="stat-label">퀘스트</div></div>
         <div class="stat-card"><div class="stat-value">${eventCount}</div><div class="stat-label">이벤트</div></div>
@@ -167,6 +171,7 @@ class AdminApp {
           <div><span style="color:var(--gold);">아이템 관리</span> - 장비, 소비품, 재료 등 모든 아이템 데이터 편집</div>
           <div><span style="color:var(--gold);">스킬 관리</span> - 심법/무공/경공/주술 스킬 및 합격기 설정</div>
           <div><span style="color:var(--gold);">몬스터 관리</span> - 몬스터 능력치, 드롭 테이블, AI 행동 설정</div>
+          <div><span style="color:var(--gold);">NPC 관리</span> - NPC 이름, 대화, 상점/퀘스트 연결, 스프라이트 설정</div>
           <div><span style="color:var(--gold);">맵 에디터</span> - 타일 기반 맵 생성 및 스폰 포인트 배치</div>
           <div><span style="color:var(--gold);">퀘스트 관리</span> - 메인/서브/일일 퀘스트 및 보상 설정</div>
           <div><span style="color:var(--gold);">이벤트 관리</span> - 기간 이벤트 및 보너스 설정</div>

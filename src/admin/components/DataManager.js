@@ -18,14 +18,28 @@ import {
   DEFAULT_HITBOX_TEMPLATES,
   DEFAULT_FORMULAS,
   DEFAULT_ADMIN_PAGES,
+  DEFAULT_NPCS,
+  DEFAULT_SHOPS,
 } from '../../data/defaultData.js';
+import { getAllMaps } from '../../game/data/mapData.js';
 
 const STORAGE_KEY = 'moduRpg_adminData_v2';
 const LEGACY_STORAGE_KEY = 'murimAdventure_adminData';
 const CUSTOM_SPRITES_KEY = 'murimAdventure_customSprites';
+const MAP_EDITOR_DATA_VERSION = 4;
+const CONTENT_LINK_VERSION = 3;
+const MAP_ID_ALIASES = {
+  map_arpg_test_field: 'field_01',
+  arpg_test_field: 'field_01',
+};
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeMapId(mapId) {
+  const id = String(mapId || '').trim();
+  return MAP_ID_ALIASES[id] || id;
 }
 
 function arrayToDict(arr) {
@@ -36,9 +50,185 @@ function arrayToDict(arr) {
   return dict;
 }
 
+function mergeMissing(target, defaults) {
+  if (!target || typeof target !== 'object') return clone(defaults);
+  for (const [key, value] of Object.entries(defaults || {})) {
+    if (target[key] == null) {
+      target[key] = clone(value);
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      target[key] = mergeMissing(target[key], value);
+    }
+  }
+  return target;
+}
+
+function convertGameMapToEditorMap(gameMap) {
+  const gameTileToEditor = { 0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6 };
+  const width = gameMap.width || 20;
+  const height = gameMap.height || 15;
+  const ground = new Array(width * height).fill(1);
+  const objects = new Array(width * height).fill(0);
+  const collision = new Array(width * height).fill(0);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const gameTile = gameMap.tiles?.[y]?.[x] ?? 0;
+      const editorTile = gameTileToEditor[gameTile] ?? 1;
+      ground[y * width + x] = editorTile;
+      if (editorTile === 4 || editorTile === 5 || editorTile === 6) {
+        collision[y * width + x] = 1;
+      }
+    }
+  }
+
+  return {
+    id: gameMap.id,
+    name: gameMap.nameKo || gameMap.name || gameMap.id,
+    width,
+    height,
+    tileSize: 32,
+    module_id: gameMap.module_id || 'world_system',
+    layers: { ground, objects, collision },
+    spawnPoints: {
+      player: gameMap.spawns?.player ? { ...gameMap.spawns.player } : { x: 1, y: 1 },
+      monsters: gameMap.spawns?.monsters ? gameMap.spawns.monsters.map(sp => ({ ...sp })) : [],
+      npcs: gameMap.npcs ? gameMap.npcs.map(n => ({ npcId: n.id, x: n.tileX, y: n.tileY })) : [],
+      items: [],
+      portals: gameMap.portals ? gameMap.portals.map(p => ({ ...p })) : [],
+    },
+  };
+}
+
+function getDefaultEditorMaps() {
+  return getAllMaps().map(convertGameMapToEditorMap);
+}
+
+function hasUsableLayers(map) {
+  const width = Number(map?.width) || 0;
+  const height = Number(map?.height) || 0;
+  const expectedSize = width * height;
+  return expectedSize > 0
+    && Array.isArray(map?.layers?.ground)
+    && map.layers.ground.length === expectedSize;
+}
+
+function normalizePortal(portal) {
+  if (!portal) return portal;
+  return {
+    ...portal,
+    targetMap: normalizeMapId(portal.targetMap),
+  };
+}
+
+function ensureDefaultMapIntegrity(data) {
+  if (!Array.isArray(data.maps)) return;
+  const defaults = getDefaultEditorMaps();
+  const defaultsById = new Map(defaults.map(map => [map.id, map]));
+  const normalizedMaps = new Map();
+
+  for (const map of data.maps) {
+    if (!map?.id) continue;
+    const mapId = normalizeMapId(map.id);
+    const defaultMap = defaultsById.get(mapId);
+    let next = { ...map, id: mapId };
+
+    if (defaultMap && !hasUsableLayers(next)) {
+      next = {
+        ...next,
+        width: defaultMap.width,
+        height: defaultMap.height,
+        tileSize: defaultMap.tileSize,
+        layers: clone(defaultMap.layers),
+      };
+    }
+
+    const defaultPortals = defaultMap?.spawnPoints?.portals || [];
+    if (!next.spawnPoints) next.spawnPoints = {};
+    if (!Array.isArray(next.spawnPoints.portals) || next.spawnPoints.portals.length === 0) {
+      next.spawnPoints.portals = defaultPortals.map(normalizePortal);
+    } else {
+      next.spawnPoints.portals = next.spawnPoints.portals.map(normalizePortal);
+    }
+
+    const existing = normalizedMaps.get(mapId);
+    normalizedMaps.set(mapId, existing ? {
+      ...existing,
+      ...next,
+      spawnPoints: {
+        ...(existing.spawnPoints || {}),
+        ...(next.spawnPoints || {}),
+      },
+    } : next);
+  }
+
+  for (const defaultMap of defaults) {
+    if (!normalizedMaps.has(defaultMap.id)) {
+      normalizedMaps.set(defaultMap.id, clone(defaultMap));
+    }
+  }
+
+  data.maps = Array.from(normalizedMaps.values());
+}
+
+function ensureDefaultContentLinks(data) {
+  const defaults = getDefaultData();
+  if (!data.skills) data.skills = {};
+  if (!Array.isArray(data.combatActions)) data.combatActions = [];
+  if (!Array.isArray(data.hitboxTemplates)) data.hitboxTemplates = [];
+
+  for (const skillId of ['skill_basic_attack']) {
+    if (!data.skills[skillId]) {
+      data.skills[skillId] = clone(defaults.skills[skillId]);
+    } else {
+      const defaultSkill = defaults.skills[skillId];
+      for (const key of ['effectKey', 'effectSpriteKey', 'heavyEffectKey', 'impactConfig']) {
+        if (data.skills[skillId][key] == null && defaultSkill[key] != null) {
+          data.skills[skillId][key] = clone(defaultSkill[key]);
+        }
+      }
+      if (data.skills[skillId].impactConfig && defaultSkill.impactConfig) {
+        data.skills[skillId].impactConfig = mergeMissing(data.skills[skillId].impactConfig, defaultSkill.impactConfig);
+        const impact = data.skills[skillId].impactConfig;
+        if (impact.hitEffect) {
+          impact.hitEffect.rotation = 0;
+          impact.hitEffect.rotationDelta = 0;
+          impact.hitEffect.dualFirstAngleOffset = 0;
+          impact.hitEffect.dualSecondAngleOffset = 0;
+        }
+        if (impact.whiffEffect) {
+          impact.whiffEffect.rotationDelta = 0;
+          impact.whiffEffect.rotationByFacing = { right: 0, down: 0, left: 0, up: 0 };
+        }
+      }
+    }
+  }
+
+  for (const action of defaults.combatActions || []) {
+    const existing = data.combatActions.find(entry => entry.id === action.id);
+    if (!existing) {
+      data.combatActions.push(clone(action));
+    } else if (action.id === 'action_basic_slash') {
+      existing.skill_id = existing.skill_id || action.skill_id;
+      existing.inputBinding = existing.inputBinding || action.inputBinding;
+      existing.effectKey = existing.effectKey || action.effectKey;
+      existing.heavyEffectKey = existing.heavyEffectKey || action.heavyEffectKey;
+    }
+  }
+
+  for (const hitbox of defaults.hitboxTemplates || []) {
+    if (!data.hitboxTemplates.some(entry => entry.id === hitbox.id)) {
+      data.hitboxTemplates.push(clone(hitbox));
+    }
+  }
+
+  data.contentLinkVersion = CONTENT_LINK_VERSION;
+}
+
 function getDefaultData() {
   return {
     schemaVersion: DATA_SCHEMA_VERSION,
+    mapEditorVersion: MAP_EDITOR_DATA_VERSION,
+    contentLinkVersion: CONTENT_LINK_VERSION,
     project: {
       title: '모두의 RPG',
       genre: '실시간 Action RPG',
@@ -56,6 +246,8 @@ function getDefaultData() {
     skills: arrayToDict(clone(SKILLS)),
     skillCombinations: clone(SKILL_COMBINATIONS),
     monsters: arrayToDict(clone(MONSTERS)),
+    npcs: arrayToDict(clone(DEFAULT_NPCS)),
+    shops: clone(DEFAULT_SHOPS),
     mainCharacter: {
       id: 'main_character',
       name: 'Main Character',
@@ -66,18 +258,7 @@ function getDefaultData() {
       raceId: 'race_human',
       description: '플레이어가 조작하는 기본 캐릭터입니다.',
     },
-    maps: [
-      {
-        id: 'map_arpg_test_field',
-        name: 'ARPG 테스트 필드',
-        width: 20,
-        height: 15,
-        tileSize: 32,
-        module_id: 'world_system',
-        layers: { ground: [], objects: [], collision: [] },
-        spawnPoints: { player: { x: 2, y: 2 }, monsters: [], npcs: [], items: [] },
-      },
-    ],
+    maps: getDefaultEditorMaps(),
     quests: [
       {
         id: 'quest_training_boxes',
@@ -188,7 +369,24 @@ export class DataManager {
         if (Array.isArray(this.data.items)) this.data.items = arrayToDict(this.data.items);
         if (Array.isArray(this.data.skills)) this.data.skills = arrayToDict(this.data.skills);
         if (Array.isArray(this.data.monsters)) this.data.monsters = arrayToDict(this.data.monsters);
+        if (Array.isArray(this.data.npcs)) this.data.npcs = arrayToDict(this.data.npcs);
         if (!this.data.mainCharacter) this.data.mainCharacter = getDefaultData().mainCharacter;
+        if (!this.data.npcs || Object.keys(this.data.npcs).length === 0) this.data.npcs = getDefaultData().npcs;
+        if (!this.data.shops) this.data.shops = getDefaultData().shops;
+        if (this.data.contentLinkVersion !== CONTENT_LINK_VERSION
+          || !this.data.skills?.skill_basic_attack
+          || !Array.isArray(this.data.combatActions)
+          || !this.data.combatActions.some(action => action.id === 'action_basic_slash' && action.skill_id === 'skill_basic_attack')) {
+          ensureDefaultContentLinks(this.data);
+        }
+        if (this.data.mapEditorVersion !== MAP_EDITOR_DATA_VERSION
+          || !Array.isArray(this.data.maps)
+          || !this.data.maps.some(map => map?.id === 'field_01')
+          || (this.data.maps.length === 1 && (!this.data.maps[0].layers?.ground?.length))) {
+          this.data.maps = getDefaultEditorMaps();
+          this.data.mapEditorVersion = MAP_EDITOR_DATA_VERSION;
+        }
+        ensureDefaultMapIntegrity(this.data);
         this.save();
       } catch (e) {
         console.error('Failed to parse stored data, loading defaults', e);
@@ -285,7 +483,7 @@ export class DataManager {
     this.data = getDefaultData();
     localStorage.removeItem(CUSTOM_SPRITES_KEY);
     this.save();
-    window.showToast('새 기획 데이터와 박스 스프라이트 기준으로 초기화되었습니다.', 'success');
+    window.showToast('새 기획 데이터와 편집 가능한 기본 맵으로 초기화되었습니다.', 'success');
   }
 
   backup() {
@@ -326,6 +524,9 @@ export class DataManager {
       { name: 'items.json', data: this.data.items },
       { name: 'skills.json', data: this.data.skills },
       { name: 'monsters.json', data: this.data.monsters },
+      { name: 'maps.json', data: this.data.maps },
+      { name: 'npcs.json', data: this.data.npcs },
+      { name: 'shops.json', data: this.data.shops },
       { name: 'skillCombinations.json', data: this.data.skillCombinations },
       { name: 'spawnConfig.json', data: this.data.spawnConfig },
       { name: 'config.json', data: { playerDefaults: this.data.gameSettings?.startingStats || {}, levelUpGrowth: this.data.statsConfig?.levelUpGrowth || {} } },
@@ -353,6 +554,8 @@ export class DataManager {
       { key: 'skills', label: '스킬' },
       { key: 'mainCharacter', label: '메인 캐릭터' },
       { key: 'monsters', label: '몬스터' },
+      { key: 'npcs', label: 'NPC' },
+      { key: 'shops', label: '상점' },
       { key: 'maps', label: '맵' },
       { key: 'quests', label: '퀘스트' },
       { key: 'events', label: '이벤트' },

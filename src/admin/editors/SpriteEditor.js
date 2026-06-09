@@ -5,6 +5,7 @@
 import { getItemIconKey } from '../../data/GameDataLoader.js';
 
 const CUSTOM_SPRITES_KEY = 'murimAdventure_customSprites';
+const SPRITE_WORKSPACE_VERSION_KEY = 'murimAdventure_spriteWorkspaceVersion';
 
 const SPRITE_REGISTRY = [
   // Characters (18 sheets: 6 anims x 3 dirs)
@@ -87,6 +88,7 @@ const SPRITE_REGISTRY = [
   // Effects
   { key: 'fx_slash', category: '이펙트', name: '슬래시', path: null, frameWidth: 96, frameHeight: 96, frames: 1, type: 'static' },
   { key: 'fx_heavy_slash', category: '이펙트', name: '강공격', path: null, frameWidth: 96, frameHeight: 96, frames: 1, type: 'static' },
+  { key: 'fx_hit_receive', category: '이펙트', name: '피격', path: null, frameWidth: 96, frameHeight: 96, frames: 4, type: 'spritesheet' },
   { key: 'fx_fist', category: '이펙트', name: '주먹', path: null, frameWidth: 96, frameHeight: 96, frames: 1, type: 'static' },
   { key: 'fx_qi_wave', category: '이펙트', name: '기파', path: null, frameWidth: 96, frameHeight: 96, frames: 1, type: 'static' },
   { key: 'fx_fire', category: '이펙트', name: '화염', path: null, frameWidth: 96, frameHeight: 96, frames: 1, type: 'static' },
@@ -169,9 +171,17 @@ const DEFAULT_PALETTE = [
   '#f0c8a0', '#d0a878', '#e8c098', '#f5d0a8',
 ];
 
+const EDITOR_VIEW_MIN_WIDTH = 960;
+const EDITOR_VIEW_MIN_HEIGHT = 540;
+const DEFAULT_ACTOR_WIDTH = 32;
+const DEFAULT_ACTOR_HEIGHT = 64;
+const DEFAULT_TILE_SIZE = 32;
+const SPRITE_WORKSPACE_VERSION = '960-32x64-v1';
+
 export class SpriteEditor {
   constructor(dataManager) {
     this.dm = dataManager;
+    this._resetStoredSpritesForWorkspaceUpgrade();
     this.selectedSprite = null;
     this.expandedCategories = {
       '아이템 장비': true,
@@ -185,7 +195,7 @@ export class SpriteEditor {
     this.brushSize = 1;
     this.zoom = 8;
     this.showGrid = true;
-    this.showCharGuide = false;
+    this.showCharGuide = true;
     this.showInvGuide = false;
     this._charGuideImage = null;
     this.currentFrame = 0;
@@ -201,12 +211,23 @@ export class SpriteEditor {
     this.displayCtx = null;
     this.undoStack = [];
     this.redoStack = [];
+    this.clipboardImageData = null;
     this.isDrawing = false;
     this.lastPixel = null;
     this.lineStart = null;
     this.rectStart = null;
     this.container = null;
     this._boundKeyHandler = null;
+    this.stage = { offsetX: 0, offsetY: 0, scale: 1, frameWidth: 0, frameHeight: 0 };
+  }
+
+  _resetStoredSpritesForWorkspaceUpgrade() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      if (localStorage.getItem(SPRITE_WORKSPACE_VERSION_KEY) === SPRITE_WORKSPACE_VERSION) return;
+      localStorage.removeItem(CUSTOM_SPRITES_KEY);
+      localStorage.setItem(SPRITE_WORKSPACE_VERSION_KEY, SPRITE_WORKSPACE_VERSION);
+    } catch {}
   }
 
   // =========================================================================
@@ -280,13 +301,33 @@ export class SpriteEditor {
   }
 
   _ensureRegistryEntry(entry) {
+    const sourceFrameWidth = entry.sourceFrameWidth || entry.frameWidth || DEFAULT_ACTOR_WIDTH;
+    const sourceFrameHeight = entry.sourceFrameHeight || entry.frameHeight || DEFAULT_ACTOR_HEIGHT;
+    const isActor = /^(char_|player_|monster_|npc_)/.test(entry.key || '')
+      || ['캐릭터', '몬스터', 'NPC'].includes(entry.category);
+    const frameWidth = entry.frameWidth || sourceFrameWidth;
+    const frameHeight = entry.frameHeight || sourceFrameHeight;
+    const normalizedFrameWidth = isActor ? DEFAULT_ACTOR_WIDTH : frameWidth;
+    const normalizedFrameHeight = isActor ? DEFAULT_ACTOR_HEIGHT : frameHeight;
+    const logicalFrameWidth = entry.logicalFrameWidth || normalizedFrameWidth;
+    const logicalFrameHeight = entry.logicalFrameHeight || normalizedFrameHeight;
+    const normalized = {
+      ...entry,
+      logicalFrameWidth,
+      logicalFrameHeight,
+      sourceFrameWidth,
+      sourceFrameHeight,
+      workspaceMode: 'infinite-centered',
+      frameWidth: normalizedFrameWidth,
+      frameHeight: normalizedFrameHeight,
+    };
     const existing = SPRITE_REGISTRY.find(s => s.key === entry.key);
     if (existing) {
-      Object.assign(existing, entry);
+      Object.assign(existing, normalized);
       return existing;
     }
-    SPRITE_REGISTRY.push(entry);
-    return entry;
+    SPRITE_REGISTRY.push(normalized);
+    return normalized;
   }
 
   _getGeneratedEquipmentKey(item) {
@@ -503,16 +544,21 @@ export class SpriteEditor {
     const skills = Object.values(data.skills || {});
     for (const skill of skills) {
       const skillName = skill.nameKo || skill.name || skill.id;
+      const isBasicAttack = skill.isBasicAttack || skill.inputBinding === 'SPACE' || skill.id === 'skill_basic_attack';
+      const skillBrowserItem = isBasicAttack ? `${skillName} (Space)` : skillName;
+      const effectBrowserGroup = isBasicAttack ? '기본공격 이펙트' : '스킬 이펙트';
       const generatedIconKey = this._getGeneratedSkillIconKey(skill);
       const generatedEffectKey = this._getGeneratedSkillEffectKey(skill);
       const resolvedIconKey = skill.iconKey || generatedIconKey;
       const resolvedEffectKey = this._getSkillEffectSpriteKey(skill);
+      const targetHitEffectKey = skill.impactConfig?.targetHitEffect?.effectKey || 'fx_hit_receive';
+      const receiveHitEffectKey = skill.impactConfig?.receiveHitEffect?.effectKey || 'fx_hit_receive';
 
       entries.push(this._getSpriteInfo(resolvedIconKey, {
         category: '아이콘',
         browserCategory: '스킬/이펙트',
         browserGroup: '스킬 아이콘',
-        browserItem: skillName,
+        browserItem: skillBrowserItem,
         name: `${skillName} (아이콘)`,
         dataId: skill.id,
         skillId: skill.id,
@@ -526,24 +572,55 @@ export class SpriteEditor {
       entries.push(this._getSpriteInfo(resolvedEffectKey, {
         category: '이펙트',
         browserCategory: '스킬/이펙트',
-        browserGroup: '스킬 이펙트',
-        browserItem: skillName,
-        name: `${skillName} (이펙트)`,
+        browserGroup: effectBrowserGroup,
+        browserItem: skillBrowserItem,
+        name: isBasicAttack ? `${skillName} (스페이스바 이펙트)` : `${skillName} (이펙트)`,
         dataId: skill.id,
         skillId: skill.id,
         spriteRole: 'skillEffect',
         frameWidth: 96,
         frameHeight: 96,
-        frames: 1,
-        type: 'static',
+        frames: 4,
+        type: 'spritesheet',
       }));
+
+      if (isBasicAttack) {
+        entries.push(this._getSpriteInfo(targetHitEffectKey, {
+          category: '이펙트',
+          browserCategory: '스킬/이펙트',
+          browserGroup: '기본공격 피격 이펙트',
+          browserItem: skillBrowserItem,
+          name: `${skillName} (대상 피격)`,
+          dataId: skill.id,
+          skillId: skill.id,
+          spriteRole: 'skillTargetHitEffect',
+          frameWidth: 96,
+          frameHeight: 96,
+          frames: 4,
+          type: 'spritesheet',
+        }));
+        entries.push(this._getSpriteInfo(receiveHitEffectKey, {
+          category: '이펙트',
+          browserCategory: '스킬/이펙트',
+          browserGroup: '맞을 때 이펙트',
+          browserItem: skillBrowserItem,
+          name: `${skillName} (받는 피격)`,
+          dataId: skill.id,
+          skillId: skill.id,
+          spriteRole: 'skillReceiveHitEffect',
+          frameWidth: 96,
+          frameHeight: 96,
+          frames: 4,
+          type: 'spritesheet',
+        }));
+      }
 
       if (!skill.iconKey) {
         entries.push(this._getSpriteInfo(generatedIconKey, {
           category: 'Icon',
           browserCategory: 'Skill / Effect',
           browserGroup: 'Skill Icon',
-          browserItem: skillName,
+          browserItem: skillBrowserItem,
           name: `${skillName} (Icon)`,
           dataId: skill.id,
           skillId: skill.id,
@@ -559,16 +636,16 @@ export class SpriteEditor {
         entries.push(this._getSpriteInfo(generatedEffectKey, {
           category: 'Effect',
           browserCategory: 'Skill / Effect',
-          browserGroup: 'Skill Effect',
-          browserItem: skillName,
+          browserGroup: effectBrowserGroup,
+          browserItem: skillBrowserItem,
           name: `${skillName} (Effect)`,
           dataId: skill.id,
           skillId: skill.id,
           spriteRole: 'skillEffect',
           frameWidth: 96,
           frameHeight: 96,
-          frames: 1,
-          type: 'static',
+          frames: 4,
+          type: 'spritesheet',
         }));
       }
 
@@ -576,7 +653,7 @@ export class SpriteEditor {
         category: '이펙트',
         browserCategory: '스킬/이펙트',
         browserGroup: '시전 애니메이션',
-        browserItem: skillName,
+        browserItem: skillBrowserItem,
         name: `${skillName} (시전)`,
         dataId: skill.id,
         skillId: skill.id,
@@ -591,9 +668,11 @@ export class SpriteEditor {
           category: '아이콘',
           browserCategory: '스킬/이펙트',
           browserGroup: '스킬 아이콘',
-          browserItem: skillName,
+          browserItem: skillBrowserItem,
           name: `${skillName} (아이콘)`,
           dataId: skill.id,
+          skillId: skill.id,
+          spriteRole: 'skillIcon',
           frameWidth: 32, frameHeight: 32, frames: 1, type: 'static',
         }));
       }
@@ -601,11 +680,13 @@ export class SpriteEditor {
         entries.push(this._getSpriteInfo(skill.effectKey, {
           category: '이펙트',
           browserCategory: '스킬/이펙트',
-          browserGroup: '스킬 이펙트',
-          browserItem: skillName,
-          name: `${skillName} (이펙트)`,
+          browserGroup: effectBrowserGroup,
+          browserItem: skillBrowserItem,
+          name: isBasicAttack ? `${skillName} (스페이스바 이펙트)` : `${skillName} (이펙트)`,
           dataId: skill.id,
-          frameWidth: 96, frameHeight: 96, frames: 1, type: 'static',
+          skillId: skill.id,
+          spriteRole: 'skillEffect',
+          frameWidth: 96, frameHeight: 96, frames: 4, type: 'spritesheet',
         }));
       }
     }
@@ -658,6 +739,9 @@ export class SpriteEditor {
         path: null,
         frameWidth: cData.frameWidth || cData.width || 64,
         frameHeight: cData.frameHeight || cData.height || 64,
+        logicalFrameWidth: cData.logicalFrameWidth || cData.sourceFrameWidth || cData.frameWidth || cData.width || 64,
+        logicalFrameHeight: cData.logicalFrameHeight || cData.sourceFrameHeight || cData.frameHeight || cData.height || 64,
+        workspaceMode: cData.workspaceMode || 'infinite-centered',
         frames: cData.frameWidth ? Math.max(1, Math.floor(cData.width / cData.frameWidth)) : 1,
         type: (cData.frameWidth && cData.width > cData.frameWidth) ? 'spritesheet' : 'static',
         isCustom: true,
@@ -784,7 +868,9 @@ export class SpriteEditor {
     infoBar.innerHTML = `
       <span style="color:var(--gold);font-weight:700;">${spr.name}</span>
       <span style="color:var(--text-dim);">${spr.key}</span>
-      <span style="color:var(--text-dim);">${spr.frameWidth}x${spr.frameHeight}</span>
+      <span style="color:var(--text-dim);">작업판 무한 확장형</span>
+      <span style="color:var(--text-dim);">1칸 = 스프라이트 1px</span>
+      <span style="color:var(--text-dim);">프레임 ${spr.frameWidth}x${spr.frameHeight}</span>
       ${spr.type === 'spritesheet' ? `<span style="color:var(--text-dim);">${spr.frames} 프레임</span>` : ''}
       ${!spr.path ? '<span style="color:var(--accent-orange);font-size:11px;">프로그래밍 생성 텍스처</span>' : ''}
     `;
@@ -792,12 +878,12 @@ export class SpriteEditor {
 
     // Canvas area
     const canvasWrap = document.createElement('div');
-    canvasWrap.style.cssText = 'flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:var(--bg-darkest);position:relative;';
+    canvasWrap.style.cssText = 'flex:1;overflow:auto;background:var(--bg-darkest);position:relative;';
     canvasWrap.id = 'sprCanvasWrap';
 
     // Checkerboard background container
     const canvasContainer = document.createElement('div');
-    canvasContainer.style.cssText = 'position:relative;';
+    canvasContainer.style.cssText = 'position:relative;min-width:100%;min-height:100%;';
     canvasContainer.id = 'sprCanvasContainer';
 
     this.displayCanvas = document.createElement('canvas');
@@ -812,12 +898,13 @@ export class SpriteEditor {
       const frameBar = document.createElement('div');
       frameBar.style.cssText = 'padding:8px 12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;font-size:12px;';
       frameBar.innerHTML = `
-        <button class="btn btn-secondary btn-small" id="sprPrevFrame">\u25C0</button>
+        <button type="button" class="btn btn-secondary btn-small" id="sprPrevFrame">\u25C0</button>
         <span id="sprFrameInfo" style="min-width:60px;text-align:center;">프레임 ${this.currentFrame + 1}/${spr.frames}</span>
-        <button class="btn btn-secondary btn-small" id="sprNextFrame">\u25B6</button>
+        <button type="button" class="btn btn-secondary btn-small" id="sprNextFrame">\u25B6</button>
+        <button type="button" class="btn btn-secondary btn-small" id="sprCopyPrevFrame" title="이전 프레임을 현재 프레임으로 복사" ${this.currentFrame <= 0 ? 'disabled' : ''}>이전 프레임 복사</button>
         <span style="color:var(--border);margin:0 4px;">|</span>
-        <button class="btn btn-secondary btn-small" id="sprPlayBtn">\u25B6 재생</button>
-        <button class="btn btn-secondary btn-small" id="sprStopBtn">\u23F8 정지</button>
+        <button type="button" class="btn btn-secondary btn-small" id="sprPlayBtn">\u25B6 재생</button>
+        <button type="button" class="btn btn-secondary btn-small" id="sprStopBtn">\u23F8 정지</button>
         <label style="display:flex;align-items:center;gap:4px;color:var(--text-dim);">속도:
           <input type="range" min="1" max="24" value="${this.animSpeed}" id="sprAnimSpeed" style="width:80px;">
           <span id="sprAnimSpeedVal">${this.animSpeed}fps</span>
@@ -826,23 +913,25 @@ export class SpriteEditor {
       center.appendChild(frameBar);
 
       // Bind frame events
-      setTimeout(() => {
-        document.getElementById('sprPrevFrame')?.addEventListener('click', () => {
+      requestAnimationFrame(() => {
+        frameBar.querySelector('#sprPrevFrame')?.addEventListener('click', () => {
           this.currentFrame = (this.currentFrame - 1 + spr.frames) % spr.frames;
           this._updateFrameDisplay();
         });
-        document.getElementById('sprNextFrame')?.addEventListener('click', () => {
+        frameBar.querySelector('#sprNextFrame')?.addEventListener('click', () => {
           this.currentFrame = (this.currentFrame + 1) % spr.frames;
           this._updateFrameDisplay();
         });
-        document.getElementById('sprPlayBtn')?.addEventListener('click', () => this._startAnimation());
-        document.getElementById('sprStopBtn')?.addEventListener('click', () => this._stopAnimation());
-        document.getElementById('sprAnimSpeed')?.addEventListener('input', (e) => {
+        frameBar.querySelector('#sprCopyPrevFrame')?.addEventListener('click', () => this._copyPreviousFrameIntoCurrent());
+        frameBar.querySelector('#sprPlayBtn')?.addEventListener('click', () => this._startAnimation());
+        frameBar.querySelector('#sprStopBtn')?.addEventListener('click', () => this._stopAnimation());
+        frameBar.querySelector('#sprAnimSpeed')?.addEventListener('input', (e) => {
           this.animSpeed = parseInt(e.target.value);
-          document.getElementById('sprAnimSpeedVal').textContent = this.animSpeed + 'fps';
+          frameBar.querySelector('#sprAnimSpeedVal').textContent = this.animSpeed + 'fps';
           if (this.isPlaying) { this._stopAnimation(); this._startAnimation(); }
         });
-      }, 0);
+        this._syncFrameControls();
+      });
     }
 
     // Action bar
@@ -951,14 +1040,14 @@ export class SpriteEditor {
     }
     html += '</div>';
 
-    // Zoom
-    html += '<div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:8px;">줌</div>';
-    html += '<div style="display:flex;gap:4px;margin-bottom:8px;">';
-    for (const z of [4, 8, 12, 16]) {
-      const active = this.zoom === z;
-      html += `<button class="spr-zoom-btn btn btn-small ${active ? 'btn-primary' : 'btn-secondary'}" data-zoom="${z}">${z}x</button>`;
-    }
-    html += '</div>';
+    // Unified stage info
+    html += '<div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:8px;">작업창</div>';
+    const stageCell = this.stage?.scale || '-';
+    html += `<div style="font-size:11px;color:var(--text-dim);line-height:1.5;margin-bottom:12px;">
+      무한 작업판 중앙 배치<br>
+      1칸 = 현재 프레임 1px<br>
+      현재 1칸 화면 크기: ${stageCell}px
+    </div>`;
 
     // Grid toggle
     html += `<div style="margin-bottom:8px;">
@@ -978,7 +1067,7 @@ export class SpriteEditor {
     </div>`;
 
     // Character guide toggle (only for equipment sprites)
-    if (this._isEquipmentSprite()) {
+    if (this.selectedSprite) {
       html += `<div style="margin-bottom:8px;">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#66ccff;">
           <input type="checkbox" id="sprCharGuide" ${this.showCharGuide ? 'checked' : ''}>
@@ -999,6 +1088,18 @@ export class SpriteEditor {
     html += `<div style="display:flex;gap:4px;margin-bottom:16px;">
       <button class="btn btn-secondary btn-small" id="sprUndo" title="Ctrl+Z">실행취소 (${this.undoStack.length})</button>
       <button class="btn btn-secondary btn-small" id="sprRedo" title="Ctrl+Y">다시실행 (${this.redoStack.length})</button>
+    </div>`;
+
+    html += '<div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:8px;">복사 / 이동</div>';
+    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px;">
+      <button class="btn btn-secondary btn-small" id="sprCopyFrame" title="Ctrl+C">복사</button>
+      <button class="btn btn-secondary btn-small" id="sprPasteFrame" title="Ctrl+V" ${this.clipboardImageData ? '' : 'disabled'}>붙여넣기</button>
+    </div>`;
+    html += `<div style="display:grid;grid-template-columns:32px 32px 32px;gap:4px;justify-content:center;margin-bottom:16px;">
+      <span></span><button class="btn btn-secondary btn-small spr-shift-btn" data-dx="0" data-dy="-1" title="위로 1칸">↑</button><span></span>
+      <button class="btn btn-secondary btn-small spr-shift-btn" data-dx="-1" data-dy="0" title="왼쪽 1칸">←</button>
+      <button class="btn btn-secondary btn-small spr-shift-btn" data-dx="0" data-dy="1" title="아래로 1칸">↓</button>
+      <button class="btn btn-secondary btn-small spr-shift-btn" data-dx="1" data-dy="0" title="오른쪽 1칸">→</button>
     </div>`;
 
     // Custom sprite count
@@ -1030,13 +1131,6 @@ export class SpriteEditor {
         this._renderTools();
       });
     });
-    tools.querySelectorAll('.spr-zoom-btn').forEach(el => {
-      el.addEventListener('click', () => {
-        this.zoom = parseInt(el.dataset.zoom);
-        this._redrawDisplay();
-        this._renderTools();
-      });
-    });
     document.getElementById('sprColorPicker')?.addEventListener('input', (e) => {
       this.currentColor = e.target.value;
       this._addRecentColor(e.target.value);
@@ -1057,6 +1151,13 @@ export class SpriteEditor {
     });
     document.getElementById('sprUndo')?.addEventListener('click', () => this._undo());
     document.getElementById('sprRedo')?.addEventListener('click', () => this._redo());
+    document.getElementById('sprCopyFrame')?.addEventListener('click', () => this._copyFrame());
+    document.getElementById('sprPasteFrame')?.addEventListener('click', () => this._pasteFrame());
+    tools.querySelectorAll('.spr-shift-btn').forEach(el => {
+      el.addEventListener('click', () => {
+        this._shiftFrame(parseInt(el.dataset.dx, 10) || 0, parseInt(el.dataset.dy, 10) || 0);
+      });
+    });
   }
 
   // =========================================================================
@@ -1185,6 +1286,8 @@ export class SpriteEditor {
 
     const frameW = spr.frameWidth;
     const frameH = spr.frameHeight;
+    const logicalFrameW = spr.logicalFrameWidth || spr.sourceFrameWidth || frameW;
+    const logicalFrameH = spr.logicalFrameHeight || spr.sourceFrameHeight || frameH;
     const totalW = frameW * frameCount;
 
     // Create blank canvas
@@ -1200,6 +1303,9 @@ export class SpriteEditor {
       height: frameH,
       frameWidth: frameW,
       frameHeight: frameH,
+      logicalFrameWidth: logicalFrameW,
+      logicalFrameHeight: logicalFrameH,
+      workspaceMode: 'infinite-centered',
     };
 
     try {
@@ -1211,13 +1317,15 @@ export class SpriteEditor {
 
     // Add to sprite registry if not already there
     if (!SPRITE_REGISTRY.find(s => s.key === animKey)) {
-      SPRITE_REGISTRY.push({
+      this._ensureRegistryEntry({
         key: animKey,
         category: '장비',
         name: animKey,
         path: null,
         frameWidth: frameW,
         frameHeight: frameH,
+        logicalFrameWidth: logicalFrameW,
+        logicalFrameHeight: logicalFrameH,
         frames: frameCount,
         type: 'spritesheet',
         isCustom: true,
@@ -1248,11 +1356,13 @@ export class SpriteEditor {
           path: null,
           frameWidth: data.frameWidth || 64,
           frameHeight: data.frameHeight || 64,
+          logicalFrameWidth: data.logicalFrameWidth || data.sourceFrameWidth || data.frameWidth || 64,
+          logicalFrameHeight: data.logicalFrameHeight || data.sourceFrameHeight || data.frameHeight || 64,
           frames: data.frameWidth ? Math.max(1, Math.floor(data.width / data.frameWidth)) : 1,
           type: 'spritesheet',
           isCustom: true,
         };
-        SPRITE_REGISTRY.push(entry);
+        entry = this._ensureRegistryEntry(entry);
       }
     }
     if (!entry) {
@@ -1277,36 +1387,36 @@ export class SpriteEditor {
   _loadCharGuideForAnim(animType, dir) {
     this._charGuideAnimType = animType;
     this._charGuideAnimDir = dir;
-    this._charGuideImage = this._createBoxCharacterGuideCanvas(64, 64, dir);
+    this._charGuideImage = this._createBoxCharacterGuideCanvas(DEFAULT_ACTOR_WIDTH, DEFAULT_ACTOR_HEIGHT, dir);
     this._charGuideIsAnimSheet = false;
-    this._charGuideFrameWidth = 64;
-    this._charGuideFrameHeight = 64;
+    this._charGuideFrameWidth = DEFAULT_ACTOR_WIDTH;
+    this._charGuideFrameHeight = DEFAULT_ACTOR_HEIGHT;
     this._charGuideFrames = 1;
     this._redrawDisplay();
   }
 
   _loadCharGuide() {
-    // Current game character is a generated 64x64 box sprite, so the editor guide
+    // Current game character is a generated 32x64 box sprite, so the editor guide
     // is drawn locally instead of loading old character spritesheets.
-    this._charGuideImage = this._createBoxCharacterGuideCanvas(64, 64, 'down');
+    this._charGuideImage = this._createBoxCharacterGuideCanvas(DEFAULT_ACTOR_WIDTH, DEFAULT_ACTOR_HEIGHT, 'down');
     this._charGuideIsAnimSheet = false;
     this._charGuideAnimType = null;
     this._charGuideAnimDir = null;
-    this._charGuideFrameWidth = 64;
-    this._charGuideFrameHeight = 64;
+    this._charGuideFrameWidth = DEFAULT_ACTOR_WIDTH;
+    this._charGuideFrameHeight = DEFAULT_ACTOR_HEIGHT;
     this._charGuideFrames = 1;
     this._redrawDisplay();
   }
 
-  _createBoxCharacterGuideCanvas(width = 64, height = 64, dir = 'down') {
+  _createBoxCharacterGuideCanvas(width = DEFAULT_ACTOR_WIDTH, height = DEFAULT_ACTOR_HEIGHT, dir = 'down') {
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
 
-    const sx = width / 64;
-    const sy = height / 64;
+    const sx = width / DEFAULT_ACTOR_WIDTH;
+    const sy = height / DEFAULT_ACTOR_HEIGHT;
     const rect = (x, y, w, h, color) => {
       ctx.fillStyle = color;
       ctx.fillRect(Math.round(x * sx), Math.round(y * sy), Math.round(w * sx), Math.round(h * sy));
@@ -1317,17 +1427,17 @@ export class SpriteEditor {
       ctx.strokeRect(Math.round(x * sx) + 0.5, Math.round(y * sy) + 0.5, Math.round(w * sx), Math.round(h * sy));
     };
 
-    rect(14, 52, 36, 6, 'rgba(0,0,0,0.35)');
-    rect(16, 16, 32, 32, 'rgba(37,99,235,0.45)');
-    stroke(16, 16, 32, 32, 'rgba(147,197,253,0.95)', 2);
-    rect(24, 28, 6, 6, 'rgba(255,255,255,0.85)');
-    rect(34, 28, 6, 6, 'rgba(255,255,255,0.85)');
-    rect(25, 29, 3, 3, 'rgba(17,24,39,0.9)');
-    rect(35, 29, 3, 3, 'rgba(17,24,39,0.9)');
-    rect(26, 40, 12, 3, 'rgba(17,24,39,0.9)');
+    rect(2, 58, 28, 4, 'rgba(0,0,0,0.35)');
+    rect(0, 0, 32, 64, 'rgba(37,99,235,0.45)');
+    stroke(1, 1, 30, 62, 'rgba(147,197,253,0.95)', 2);
+    rect(7, 18, 5, 5, 'rgba(255,255,255,0.85)');
+    rect(20, 18, 5, 5, 'rgba(255,255,255,0.85)');
+    rect(8, 19, 2, 2, 'rgba(17,24,39,0.9)');
+    rect(21, 19, 2, 2, 'rgba(17,24,39,0.9)');
+    rect(10, 34, 12, 3, 'rgba(17,24,39,0.9)');
 
-    stroke(16, 20, 32, 40, 'rgba(34,211,238,0.9)', 1);
-    stroke(16, 16, 32, 32, 'rgba(250,204,21,0.75)', 1);
+    stroke(0, 0, 32, 64, 'rgba(34,211,238,0.9)', 1);
+    stroke(0, 16, 32, 32, 'rgba(250,204,21,0.75)', 1);
 
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
     ctx.font = `${Math.max(7, Math.round(8 * sx))}px monospace`;
@@ -1339,21 +1449,13 @@ export class SpriteEditor {
     if (!this.selectedSprite) return;
     const spr = this.selectedSprite;
 
-    // Load character guide for equipment sprites
-    if (this._isEquipmentSprite()) {
-      this.showCharGuide = true;
-      // Check if this is an equipment animation sprite
-      const animInfo = this._parseEquipAnimKey(spr.key);
-      if (animInfo) {
-        // Load the matching character animation as guide
-        this._loadCharGuideForAnim(animInfo.animType, animInfo.dir);
-      } else {
-        this._loadCharGuide();
-      }
+    // Unified editor always shows the current box character guide.
+    this.showCharGuide = true;
+    const animInfo = this._parseEquipAnimKey(spr.key);
+    if (animInfo) {
+      this._loadCharGuideForAnim(animInfo.animType, animInfo.dir);
     } else {
-      this.showCharGuide = false;
-      this._charGuideImage = null;
-      this._charGuideIsAnimSheet = false;
+      this._loadCharGuide();
     }
     const customs = this._getCustomSprites();
 
@@ -1361,8 +1463,14 @@ export class SpriteEditor {
       // Load custom sprite
       const img = new Image();
       img.onload = () => {
-        this._initNativeCanvas(img.width, img.height);
-        this.nativeCtx.drawImage(img, 0, 0);
+        this._initNativeCanvas(spr.frameWidth * Math.max(1, spr.frames || 1), spr.frameHeight);
+        this._drawImageFramesToWorkspace(
+          img,
+          customs[spr.key].frameWidth || spr.frameWidth,
+          customs[spr.key].frameHeight || spr.frameHeight,
+          Math.max(1, Math.floor(img.width / (customs[spr.key].frameWidth || spr.frameWidth))),
+          spr
+        );
         this.undoStack = [];
         this.redoStack = [];
         this._redrawDisplay();
@@ -1376,7 +1484,13 @@ export class SpriteEditor {
         const w = spr.type === 'spritesheet' ? spr.frameWidth * spr.frames : spr.frameWidth;
         const h = spr.frameHeight;
         this._initNativeCanvas(w, h);
-        this.nativeCtx.drawImage(img, 0, 0, w, h);
+        this._drawImageFramesToWorkspace(
+          img,
+          spr.sourceFrameWidth || spr.logicalFrameWidth || img.width,
+          spr.sourceFrameHeight || spr.logicalFrameHeight || img.height,
+          Math.max(1, spr.frames || 1),
+          spr
+        );
         this.undoStack = [];
         this.redoStack = [];
         this._redrawDisplay();
@@ -1407,14 +1521,45 @@ export class SpriteEditor {
 
   _drawProgrammaticSprite(spr) {
     if (!this.nativeCtx || !spr) return;
-    const ctx = this.nativeCtx;
     const fw = spr.frameWidth || this.nativeCanvas.width;
     const fh = spr.frameHeight || this.nativeCanvas.height;
+    const sourceW = spr.sourceFrameWidth || spr.logicalFrameWidth || fw;
+    const sourceH = spr.sourceFrameHeight || spr.logicalFrameHeight || fh;
     const frames = spr.type === 'spritesheet' ? Math.max(1, spr.frames || 1) : 1;
 
     for (let frame = 0; frame < frames; frame++) {
-      const ox = frame * fw;
-      this._drawProgrammaticFrame(ctx, spr.key, ox, 0, fw, fh, frame, frames);
+      const temp = document.createElement('canvas');
+      temp.width = sourceW;
+      temp.height = sourceH;
+      const tctx = temp.getContext('2d');
+      tctx.imageSmoothingEnabled = false;
+      this._drawProgrammaticFrame(tctx, spr.key, 0, 0, sourceW, sourceH, frame, frames);
+      this.nativeCtx.drawImage(temp, 0, 0, sourceW, sourceH, frame * fw, 0, fw, fh);
+    }
+  }
+
+  _drawImageFramesToWorkspace(img, sourceFrameWidth, sourceFrameHeight, sourceFrames, spr) {
+    if (!this.nativeCtx || !img || !spr) return;
+    const targetFrameWidth = spr.frameWidth || DEFAULT_ACTOR_WIDTH;
+    const targetFrameHeight = spr.frameHeight || DEFAULT_ACTOR_HEIGHT;
+    const frameCount = Math.max(1, spr.type === 'spritesheet' ? (spr.frames || sourceFrames || 1) : 1);
+    const sourceW = Math.max(1, Number(sourceFrameWidth) || img.width);
+    const sourceH = Math.max(1, Number(sourceFrameHeight) || img.height);
+    const availableFrames = Math.max(1, Math.floor(img.width / sourceW));
+
+    for (let frame = 0; frame < frameCount; frame++) {
+      const sourceFrame = Math.min(frame, availableFrames - 1);
+      this.nativeCtx.drawImage(
+        img,
+        sourceFrame * sourceW,
+        0,
+        Math.min(sourceW, img.width - sourceFrame * sourceW),
+        Math.min(sourceH, img.height),
+        frame * targetFrameWidth,
+        0,
+        targetFrameWidth,
+        targetFrameHeight
+      );
     }
   }
 
@@ -1444,16 +1589,19 @@ export class SpriteEditor {
       ctx.stroke();
     };
 
-    if (key.startsWith('player_') || key === 'player_base' || key === 'player_box') {
-      rect(14, 52, 36, 6, 'rgba(0,0,0,0.35)');
-      rect(16, 16, 32, 32, '#2563eb');
-      stroke(16, 16, 32, 32, '#93c5fd', 3);
-      rect(24, 28, 6, 6, '#ffffff');
-      rect(34, 28, 6, 6, '#ffffff');
-      rect(25, 29, 3, 3, '#111827');
-      rect(35, 29, 3, 3, '#111827');
-      rect(26, 40, 12, 3, '#111827');
-      if (frames > 1) rect(8 + frame * 2, 8, 6, 4, '#facc15');
+    if (/^(char_|player_|monster_|npc_)/.test(key) || key === 'player_base' || key === 'player_box') {
+      const actorFill = key.startsWith('monster_') ? '#dc2626' : key.startsWith('npc_') ? '#16a34a' : '#2563eb';
+      const actorEdge = key.startsWith('monster_') ? '#fca5a5' : key.startsWith('npc_') ? '#86efac' : '#93c5fd';
+      rect(2, h - 6, Math.max(1, w - 4), 4, 'rgba(0,0,0,0.35)');
+      rect(0, 0, w, h, actorFill);
+      stroke(1, 1, Math.max(1, w - 2), Math.max(1, h - 2), actorEdge, 2);
+      rect(Math.round(w * 0.22), Math.round(h * 0.28), 5, 5, '#ffffff');
+      rect(Math.round(w * 0.62), Math.round(h * 0.28), 5, 5, '#ffffff');
+      rect(Math.round(w * 0.25), Math.round(h * 0.30), 2, 2, '#111827');
+      rect(Math.round(w * 0.65), Math.round(h * 0.30), 2, 2, '#111827');
+      rect(Math.round(w * 0.31), Math.round(h * 0.53), Math.max(4, Math.round(w * 0.38)), 3, '#111827');
+      stroke(0, Math.max(0, Math.round((h - DEFAULT_TILE_SIZE) / 2)), Math.min(w, DEFAULT_TILE_SIZE), Math.min(h, DEFAULT_TILE_SIZE), '#facc15', 1);
+      if (frames > 1) rect(2 + frame * 2, 6, 6, 4, '#facc15');
       return;
     }
 
@@ -1478,11 +1626,27 @@ export class SpriteEditor {
     }
 
     if (key === 'fx_slash' || key === 'fx_heavy_slash') {
-      line(22, 70, 72, 20, '#ffffff', 8);
-      line(25, 72, 75, 22, '#66ccff', 4);
+      const spread = frames > 1 ? frame * 4 : 0;
+      line(22 - spread, 70 + spread, 72 + spread, 20 - spread, '#ffffff', 8);
+      line(25 - spread, 72 + spread, 75 + spread, 22 - spread, '#66ccff', 4);
       if (key === 'fx_heavy_slash') {
-        line(24, 22, 72, 70, '#ffffff', 7);
-        line(27, 24, 75, 72, '#ffaa66', 4);
+        line(24 - spread, 22 - spread, 72 + spread, 70 + spread, '#ffffff', 7);
+        line(27 - spread, 24 - spread, 75 + spread, 72 + spread, '#ffaa66', 4);
+      }
+      return;
+    }
+    if (key === 'fx_hit_receive') {
+      const r = 10 + frame * 7;
+      circle(w / 2, h / 2, r, 'rgba(255,255,255,0.2)');
+      circle(w / 2, h / 2, Math.max(4, r - 7), 'rgba(255,68,68,0.35)');
+      circle(w / 2, h / 2, 4 + frame, 'rgba(255,255,255,0.9)');
+      for (let i = 0; i < 8; i++) {
+        const a = (Math.PI * 2 * i) / 8;
+        const x1 = w / 2 + Math.cos(a) * (6 + frame * 2);
+        const y1 = h / 2 + Math.sin(a) * (6 + frame * 2);
+        const x2 = w / 2 + Math.cos(a) * (18 + frame * 7);
+        const y2 = h / 2 + Math.sin(a) * (18 + frame * 7);
+        line(x1, y1, x2, y2, '#ffeeee', Math.max(1, 4 - frame));
       }
       return;
     }
@@ -1527,33 +1691,48 @@ export class SpriteEditor {
     const spr = this.selectedSprite;
     const isSheet = spr.type === 'spritesheet' && spr.frames > 1;
 
-    // For spritesheets, show only the current frame
     const srcX = isSheet ? this.currentFrame * spr.frameWidth : 0;
     const srcY = 0;
     const srcW = spr.frameWidth;
     const srcH = spr.frameHeight;
 
-    const dw = srcW * this.zoom;
-    const dh = srcH * this.zoom;
+    const wrap = document.getElementById('sprCanvasWrap');
+    const wrapRect = wrap?.getBoundingClientRect?.();
+    let dw = Math.max(EDITOR_VIEW_MIN_WIDTH, Math.floor(wrapRect?.width || 0));
+    let dh = Math.max(EDITOR_VIEW_MIN_HEIGHT, Math.floor(wrapRect?.height || 0));
+    const availableW = Math.max(1, dw - 160);
+    const availableH = Math.max(1, dh - 160);
+    const scale = Math.max(1, Math.min(16, Math.floor(Math.min(availableW / srcW, availableH / srcH))));
+    const viewW = srcW * scale;
+    const viewH = srcH * scale;
+    dw = Math.max(dw, viewW + 160);
+    dh = Math.max(dh, viewH + 160);
+    const offsetX = Math.floor((dw - viewW) / 2);
+    const offsetY = Math.floor((dh - viewH) / 2);
+    this.stage = { offsetX, offsetY, scale, frameWidth: srcW, frameHeight: srcH };
 
     this.displayCanvas.width = dw;
     this.displayCanvas.height = dh;
     this.displayCtx = this.displayCanvas.getContext('2d');
     this.displayCtx.imageSmoothingEnabled = false;
+    this.displayCanvas.style.width = `${dw}px`;
+    this.displayCanvas.style.height = `${dh}px`;
 
-    // Draw checkerboard background
-    const checkSize = this.zoom;
-    for (let y = 0; y < dh; y += checkSize) {
-      for (let x = 0; x < dw; x += checkSize) {
-        const px = Math.floor(x / this.zoom);
-        const py = Math.floor(y / this.zoom);
-        this.displayCtx.fillStyle = (px + py) % 2 === 0 ? '#2a2a2a' : '#3a3a3a';
-        this.displayCtx.fillRect(x, y, checkSize, checkSize);
+    // Unified editor background. Keep it identical for every sprite type/size.
+    this.displayCtx.fillStyle = '#15151f';
+    this.displayCtx.fillRect(0, 0, dw, dh);
+    const bgCell = 32;
+    for (let y = 0; y < dh; y += bgCell) {
+      for (let x = 0; x < dw; x += bgCell) {
+        this.displayCtx.fillStyle = ((x / bgCell + y / bgCell) % 2 === 0) ? '#1d1d28' : '#181822';
+        this.displayCtx.fillRect(x, y, bgCell, bgCell);
       }
     }
+    this.displayCtx.fillStyle = '#242432';
+    this.displayCtx.fillRect(offsetX, offsetY, viewW, viewH);
 
-    // Draw character guide overlay for equipment sprites
-    if (this._isEquipmentSprite() && this._charGuideImage && this.showCharGuide) {
+    // Draw character guide overlay
+    if (this._charGuideImage && this.showCharGuide) {
       this.displayCtx.globalAlpha = 0.3;
 
       if (this._charGuideIsAnimSheet && this._charGuideFrameWidth) {
@@ -1563,14 +1742,14 @@ export class SpriteEditor {
         this.displayCtx.drawImage(
           this._charGuideImage,
           guideSrcX, 0, this._charGuideFrameWidth, this._charGuideFrameHeight,
-          0, 0, dw, dh
+          offsetX, offsetY, viewW, viewH
         );
       } else {
         // Static guide: show first frame of idle_down
         this.displayCtx.drawImage(
           this._charGuideImage,
-          0, 0, spr.frameWidth, spr.frameHeight,
-          0, 0, dw, dh
+          0, 0, this._charGuideImage.width, this._charGuideImage.height,
+          offsetX, offsetY, viewW, viewH
         );
       }
       this.displayCtx.globalAlpha = 1.0;
@@ -1588,15 +1767,15 @@ export class SpriteEditor {
       this.displayCtx.setLineDash([4, 4]);
       this.displayCtx.lineWidth = 1;
       // Head region ~row 6-20 (top quarter)
-      const headY = Math.round(spr.frameHeight * 0.1) * this.zoom;
-      const neckY = Math.round(spr.frameHeight * 0.3) * this.zoom;
-      const waistY = Math.round(spr.frameHeight * 0.6) * this.zoom;
-      const kneeY = Math.round(spr.frameHeight * 0.75) * this.zoom;
+      const headY = offsetY + Math.round(spr.frameHeight * 0.1) * scale;
+      const neckY = offsetY + Math.round(spr.frameHeight * 0.3) * scale;
+      const waistY = offsetY + Math.round(spr.frameHeight * 0.6) * scale;
+      const kneeY = offsetY + Math.round(spr.frameHeight * 0.75) * scale;
       this.displayCtx.beginPath();
-      this.displayCtx.moveTo(0, headY); this.displayCtx.lineTo(dw, headY);
-      this.displayCtx.moveTo(0, neckY); this.displayCtx.lineTo(dw, neckY);
-      this.displayCtx.moveTo(0, waistY); this.displayCtx.lineTo(dw, waistY);
-      this.displayCtx.moveTo(0, kneeY); this.displayCtx.lineTo(dw, kneeY);
+      this.displayCtx.moveTo(offsetX, headY); this.displayCtx.lineTo(offsetX + viewW, headY);
+      this.displayCtx.moveTo(offsetX, neckY); this.displayCtx.lineTo(offsetX + viewW, neckY);
+      this.displayCtx.moveTo(offsetX, waistY); this.displayCtx.lineTo(offsetX + viewW, waistY);
+      this.displayCtx.moveTo(offsetX, kneeY); this.displayCtx.lineTo(offsetX + viewW, kneeY);
       this.displayCtx.stroke();
       this.displayCtx.setLineDash([]);
 
@@ -1607,15 +1786,15 @@ export class SpriteEditor {
       this.displayCtx.fillText('갑옷', 2, neckY + 12);
       this.displayCtx.fillText('허리', 2, waistY + 12);
       this.displayCtx.fillText('신발', 2, kneeY + 12);
-      // Current generated player guide: 64x64 box body and collision area.
-      const boxBodyX = Math.round(spr.frameWidth * 16 / 64) * this.zoom;
-      const boxBodyY = Math.round(spr.frameHeight * 16 / 64) * this.zoom;
-      const boxBodyW = Math.round(spr.frameWidth * 32 / 64) * this.zoom;
-      const boxBodyH = Math.round(spr.frameHeight * 32 / 64) * this.zoom;
-      const boxHitX = Math.round(spr.frameWidth * 16 / 64) * this.zoom;
-      const boxHitY = Math.round(spr.frameHeight * 20 / 64) * this.zoom;
-      const boxHitW = Math.round(spr.frameWidth * 32 / 64) * this.zoom;
-      const boxHitH = Math.round(spr.frameHeight * 40 / 64) * this.zoom;
+      // Current generated actors are 32x64 with a centered 32x32 collision box.
+      const boxBodyX = offsetX;
+      const boxBodyY = offsetY;
+      const boxBodyW = viewW;
+      const boxBodyH = viewH;
+      const boxHitX = offsetX;
+      const boxHitY = offsetY + Math.max(0, Math.round((srcH - DEFAULT_TILE_SIZE) / 2) * scale);
+      const boxHitW = Math.min(viewW, DEFAULT_TILE_SIZE * scale);
+      const boxHitH = Math.min(viewH, DEFAULT_TILE_SIZE * scale);
       this.displayCtx.setLineDash([6, 3]);
       this.displayCtx.strokeStyle = 'rgba(34, 211, 238, 0.75)';
       this.displayCtx.strokeRect(boxBodyX, boxBodyY, boxBodyW, boxBodyH);
@@ -1632,26 +1811,26 @@ export class SpriteEditor {
     this.displayCtx.drawImage(
       this.nativeCanvas,
       srcX, srcY, srcW, srcH,
-      0, 0, dw, dh
+      offsetX, offsetY, viewW, viewH
     );
 
     // Draw 1-pixel cell grid. Every line marks one native sprite pixel.
-    if (this.showGrid && this.zoom >= 4) {
+    if (this.showGrid) {
       this.displayCtx.lineWidth = 1;
-      for (let x = 0; x <= dw; x += this.zoom) {
-        const cell = Math.round(x / this.zoom);
+      for (let x = 0; x <= viewW; x += scale) {
+        const cell = Math.round(x / scale);
         this.displayCtx.strokeStyle = cell % 8 === 0 ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.10)';
         this.displayCtx.beginPath();
-        this.displayCtx.moveTo(x + 0.5, 0);
-        this.displayCtx.lineTo(x + 0.5, dh);
+        this.displayCtx.moveTo(offsetX + x + 0.5, offsetY);
+        this.displayCtx.lineTo(offsetX + x + 0.5, offsetY + viewH);
         this.displayCtx.stroke();
       }
-      for (let y = 0; y <= dh; y += this.zoom) {
-        const cell = Math.round(y / this.zoom);
+      for (let y = 0; y <= viewH; y += scale) {
+        const cell = Math.round(y / scale);
         this.displayCtx.strokeStyle = cell % 8 === 0 ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.10)';
         this.displayCtx.beginPath();
-        this.displayCtx.moveTo(0, y + 0.5);
-        this.displayCtx.lineTo(dw, y + 0.5);
+        this.displayCtx.moveTo(offsetX, offsetY + y + 0.5);
+        this.displayCtx.lineTo(offsetX + viewW, offsetY + y + 0.5);
         this.displayCtx.stroke();
       }
     }
@@ -1675,21 +1854,21 @@ export class SpriteEditor {
       const usablePixH = invUsable / fitScale;
 
       // Draw the "safe zone" box centered on the sprite
-      const safeL = ((srcW - usablePixW) / 2) * this.zoom;
-      const safeT = ((srcH - usablePixH) / 2) * this.zoom;
-      const safeW = usablePixW * this.zoom;
-      const safeH = usablePixH * this.zoom;
+      const safeL = offsetX + ((srcW - usablePixW) / 2) * scale;
+      const safeT = offsetY + ((srcH - usablePixH) / 2) * scale;
+      const safeW = usablePixW * scale;
+      const safeH = usablePixH * scale;
 
       // Dim area outside the safe zone
       this.displayCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
       // Top strip
-      if (safeT > 0) this.displayCtx.fillRect(0, 0, dw, safeT);
+      if (safeT > offsetY) this.displayCtx.fillRect(offsetX, offsetY, viewW, safeT - offsetY);
       // Bottom strip
-      if (safeT + safeH < dh) this.displayCtx.fillRect(0, safeT + safeH, dw, dh - safeT - safeH);
+      if (safeT + safeH < offsetY + viewH) this.displayCtx.fillRect(offsetX, safeT + safeH, viewW, offsetY + viewH - safeT - safeH);
       // Left strip
-      if (safeL > 0) this.displayCtx.fillRect(0, safeT, safeL, safeH);
+      if (safeL > offsetX) this.displayCtx.fillRect(offsetX, safeT, safeL - offsetX, safeH);
       // Right strip
-      if (safeL + safeW < dw) this.displayCtx.fillRect(safeL + safeW, safeT, dw - safeL - safeW, safeH);
+      if (safeL + safeW < offsetX + viewW) this.displayCtx.fillRect(safeL + safeW, safeT, offsetX + viewW - safeL - safeW, safeH);
 
       // Draw the safe zone border
       this.displayCtx.strokeStyle = 'rgba(255, 170, 68, 0.8)';
@@ -1703,6 +1882,13 @@ export class SpriteEditor {
       this.displayCtx.font = '11px monospace';
       this.displayCtx.fillText(`인벤토리 (${invCell}×${invCell}, ${Math.round(fitScale * 100)}%)`, safeL + 2, safeT - 4 > 12 ? safeT - 4 : safeT + 14);
     }
+
+    this.displayCtx.strokeStyle = 'rgba(255,255,255,0.55)';
+    this.displayCtx.lineWidth = 2;
+    this.displayCtx.strokeRect(offsetX + 0.5, offsetY + 0.5, viewW, viewH);
+    this.displayCtx.fillStyle = 'rgba(255,255,255,0.86)';
+    this.displayCtx.font = '13px monospace';
+    this.displayCtx.fillText(`infinite board | 1 grid = 1px | frame ${srcW}x${srcH} | cell ${scale}px`, 12, 22);
   }
 
   _updateFrameDisplay() {
@@ -1710,7 +1896,21 @@ export class SpriteEditor {
     if (info && this.selectedSprite) {
       info.textContent = `프레임 ${this.currentFrame + 1}/${this.selectedSprite.frames}`;
     }
+    this._syncFrameControls();
     this._redrawDisplay();
+  }
+
+  _syncFrameControls() {
+    const copyPrevBtn = document.getElementById('sprCopyPrevFrame');
+    if (!copyPrevBtn || !this.selectedSprite) return;
+    const canCopyPrevious = this.selectedSprite.type === 'spritesheet'
+      && this.selectedSprite.frames > 1
+      && this.currentFrame > 0
+      && !!this.nativeCtx;
+    copyPrevBtn.disabled = !canCopyPrevious;
+    copyPrevBtn.title = canCopyPrevious
+      ? `${this.currentFrame}번 프레임을 ${this.currentFrame + 1}번 프레임으로 복사`
+      : '2번 프레임 이상에서 사용할 수 있습니다';
   }
 
   // =========================================================================
@@ -1721,22 +1921,27 @@ export class SpriteEditor {
     const rect = this.displayCanvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
-    let px = Math.floor(mx / this.zoom);
-    let py = Math.floor(my / this.zoom);
+    const stage = this.stage || { offsetX: 0, offsetY: 0, scale: this.zoom };
+    let localX = Math.floor((mx - stage.offsetX) / stage.scale);
+    let localY = Math.floor((my - stage.offsetY) / stage.scale);
+    const inBounds = localX >= 0 && localX < stage.frameWidth && localY >= 0 && localY < stage.frameHeight;
 
     // Offset for spritesheet frame
     const spr = this.selectedSprite;
+    let px = localX;
+    let py = localY;
     if (spr && spr.type === 'spritesheet' && spr.frames > 1) {
       px += this.currentFrame * spr.frameWidth;
     }
-    return { px, py };
+    return { px, py, inBounds };
   }
 
   _onCanvasMouseDown(e) {
     if (!this.nativeCanvas || this.isPlaying) return;
     e.preventDefault();
+    const { px, py, inBounds } = this._displayToNative(e);
+    if (!inBounds) return;
     this.isDrawing = true;
-    const { px, py } = this._displayToNative(e);
 
     if (this.currentTool === 'picker') {
       this._eyedrop(px, py);
@@ -1769,7 +1974,8 @@ export class SpriteEditor {
 
   _onCanvasMouseMove(e) {
     if (!this.isDrawing || !this.nativeCanvas || this.isPlaying) return;
-    const { px, py } = this._displayToNative(e);
+    const { px, py, inBounds } = this._displayToNative(e);
+    if (!inBounds) return;
 
     if (this.currentTool === 'pencil' || this.currentTool === 'eraser') {
       if (this.lastPixel && (this.lastPixel.px !== px || this.lastPixel.py !== py)) {
@@ -1884,6 +2090,168 @@ export class SpriteEditor {
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);
     return { r, g, b, a: 255 };
+  }
+
+  _getCurrentFrameRect() {
+    if (!this.selectedSprite || !this.nativeCanvas) return null;
+    const spr = this.selectedSprite;
+    const isSheet = spr.type === 'spritesheet' && spr.frames > 1;
+    const frameW = spr.frameWidth || this.nativeCanvas.width;
+    const frameH = spr.frameHeight || this.nativeCanvas.height;
+    const actualFrames = isSheet ? Math.max(1, Math.floor(this.nativeCanvas.width / frameW)) : 1;
+    const frameIndex = isSheet ? Math.min(this.currentFrame, actualFrames - 1) : 0;
+    return {
+      x: isSheet ? frameIndex * frameW : 0,
+      y: 0,
+      w: Math.min(frameW, Math.max(0, this.nativeCanvas.width - (isSheet ? frameIndex * frameW : 0))),
+      h: Math.min(frameH, this.nativeCanvas.height),
+    };
+  }
+
+  _ensureCanvasFrameCapacity() {
+    if (!this.selectedSprite || !this.nativeCanvas || !this.nativeCtx) return false;
+    const spr = this.selectedSprite;
+    const frameW = spr.frameWidth || this.nativeCanvas.width;
+    const frameH = spr.frameHeight || this.nativeCanvas.height;
+    const frames = spr.type === 'spritesheet' ? Math.max(1, spr.frames || 1) : 1;
+    const requiredW = frameW * frames;
+    const requiredH = frameH;
+    if (this.nativeCanvas.width >= requiredW && this.nativeCanvas.height >= requiredH) return true;
+
+    const nextCanvas = document.createElement('canvas');
+    nextCanvas.width = Math.max(requiredW, this.nativeCanvas.width);
+    nextCanvas.height = Math.max(requiredH, this.nativeCanvas.height);
+    const nextCtx = nextCanvas.getContext('2d');
+    nextCtx.imageSmoothingEnabled = false;
+    nextCtx.drawImage(this.nativeCanvas, 0, 0);
+    this.nativeCanvas = nextCanvas;
+    this.nativeCtx = nextCtx;
+    return true;
+  }
+
+  _copyRectAsPixelJson(rect) {
+    if (!rect || !this.nativeCtx || rect.w <= 0 || rect.h <= 0) return null;
+    const imageData = this.nativeCtx.getImageData(rect.x, rect.y, rect.w, rect.h);
+    return {
+      type: 'murim-sprite-pixels',
+      width: imageData.width,
+      height: imageData.height,
+      pixels: Array.from(imageData.data),
+    };
+  }
+
+  _pastePixelJsonToRect(payload, rect) {
+    if (!payload || !rect || !this.nativeCtx) return false;
+    const srcPixels = Array.isArray(payload.pixels) ? payload.pixels : null;
+    const srcW = parseInt(payload.width, 10) || 0;
+    const srcH = parseInt(payload.height, 10) || 0;
+    if (!srcPixels || srcW <= 0 || srcH <= 0 || rect.w <= 0 || rect.h <= 0) return false;
+
+    const pasteW = Math.min(srcW, rect.w);
+    const pasteH = Math.min(srcH, rect.h);
+    const target = this.nativeCtx.getImageData(rect.x, rect.y, rect.w, rect.h);
+    for (let y = 0; y < pasteH; y++) {
+      for (let x = 0; x < pasteW; x++) {
+        const srcIdx = (y * srcW + x) * 4;
+        const dstIdx = (y * rect.w + x) * 4;
+        target.data[dstIdx] = srcPixels[srcIdx] || 0;
+        target.data[dstIdx + 1] = srcPixels[srcIdx + 1] || 0;
+        target.data[dstIdx + 2] = srcPixels[srcIdx + 2] || 0;
+        target.data[dstIdx + 3] = srcPixels[srcIdx + 3] || 0;
+      }
+    }
+    this.nativeCtx.putImageData(target, rect.x, rect.y);
+    return true;
+  }
+
+  _copyFrame() {
+    this._ensureCanvasFrameCapacity();
+    const rect = this._getCurrentFrameRect();
+    if (!rect || !this.nativeCtx) return;
+    this.clipboardImageData = this._copyRectAsPixelJson(rect);
+    this._renderTools();
+    if (window.showToast) window.showToast(`현재 프레임 픽셀 ${rect.w}x${rect.h}를 JSON으로 복사했습니다.`, 'success');
+  }
+
+  _copyPreviousFrameIntoCurrent() {
+    if (!this.selectedSprite || !this.nativeCtx || !this.nativeCanvas) {
+      if (window.showToast) window.showToast('스프라이트 로딩이 끝난 뒤 다시 시도해주세요.', 'info');
+      return;
+    }
+    const spr = this.selectedSprite;
+    if (spr.type !== 'spritesheet' || spr.frames <= 1) {
+      if (window.showToast) window.showToast('프레임이 2개 이상인 스프라이트에서만 사용할 수 있습니다.', 'info');
+      return;
+    }
+    if (this.currentFrame <= 0) {
+      if (window.showToast) window.showToast('첫 프레임에는 이전 프레임이 없습니다. 2번 프레임 이상에서 사용해주세요.', 'info');
+      return;
+    }
+
+    this._ensureCanvasFrameCapacity();
+    const frameW = spr.frameWidth || this.nativeCanvas.width;
+    const frameH = spr.frameHeight || this.nativeCanvas.height;
+
+    const currentX = this.currentFrame * frameW;
+    const previousX = (this.currentFrame - 1) * frameW;
+    const previousRect = { x: previousX, y: 0, w: frameW, h: frameH };
+    const currentRect = { x: currentX, y: 0, w: frameW, h: frameH };
+    const payload = this._copyRectAsPixelJson(previousRect);
+    if (!payload) {
+      if (window.showToast) window.showToast('이전 프레임 픽셀을 읽을 수 없습니다.', 'error');
+      return;
+    }
+
+    this._pushUndo();
+    this.nativeCtx.clearRect(currentX, 0, frameW, frameH);
+    this._pastePixelJsonToRect(payload, currentRect);
+    this._redrawDisplay();
+    this._renderTools();
+    this._syncFrameControls();
+    if (window.showToast) window.showToast(`${this.currentFrame}번 프레임을 ${this.currentFrame + 1}번 프레임으로 복사했습니다.`, 'success');
+  }
+
+  _pasteFrame() {
+    this._ensureCanvasFrameCapacity();
+    const rect = this._getCurrentFrameRect();
+    if (!rect || !this.nativeCtx || !this.clipboardImageData) return;
+    if (!Array.isArray(this.clipboardImageData.pixels) || !this.clipboardImageData.width || !this.clipboardImageData.height) {
+      if (window.showToast) window.showToast('붙여넣을 픽셀 JSON을 읽을 수 없습니다.', 'error');
+      return;
+    }
+    this._pushUndo();
+    this.nativeCtx.clearRect(rect.x, rect.y, rect.w, rect.h);
+    const ok = this._pastePixelJsonToRect(this.clipboardImageData, rect);
+    if (!ok) {
+      if (window.showToast) window.showToast('붙여넣을 픽셀 JSON을 읽을 수 없습니다.', 'error');
+      return;
+    }
+
+    this._redrawDisplay();
+    this._renderTools();
+    if (window.showToast) window.showToast('복사한 픽셀 정보를 현재 프레임에 붙여넣었습니다.', 'success');
+  }
+
+  _shiftFrame(dx, dy) {
+    const rect = this._getCurrentFrameRect();
+    if (!rect || !this.nativeCtx || (!dx && !dy)) return;
+    this._pushUndo();
+
+    const frameData = this.nativeCtx.getImageData(rect.x, rect.y, rect.w, rect.h);
+    const temp = document.createElement('canvas');
+    temp.width = rect.w;
+    temp.height = rect.h;
+    temp.getContext('2d').putImageData(frameData, 0, 0);
+
+    this.nativeCtx.clearRect(rect.x, rect.y, rect.w, rect.h);
+    this.nativeCtx.save();
+    this.nativeCtx.beginPath();
+    this.nativeCtx.rect(rect.x, rect.y, rect.w, rect.h);
+    this.nativeCtx.clip();
+    this.nativeCtx.drawImage(temp, rect.x + dx, rect.y + dy);
+    this.nativeCtx.restore();
+    this._redrawDisplay();
+    this._renderTools();
   }
 
   // =========================================================================
@@ -2017,6 +2385,9 @@ export class SpriteEditor {
       height: this.nativeCanvas.height,
       frameWidth: spr.frameWidth,
       frameHeight: spr.frameHeight,
+      logicalFrameWidth: spr.logicalFrameWidth || spr.sourceFrameWidth || spr.frameWidth,
+      logicalFrameHeight: spr.logicalFrameHeight || spr.sourceFrameHeight || spr.frameHeight,
+      workspaceMode: 'infinite-centered',
       category: spr.category || '커스텀',
     };
     if (spr.baseSpriteKey && spr.key !== spr.baseSpriteKey && !spr.characterSpriteRole && !customs[spr.baseSpriteKey]) {
@@ -2029,6 +2400,9 @@ export class SpriteEditor {
         height: spr.frameHeight,
         frameWidth: spr.frameWidth,
         frameHeight: spr.frameHeight,
+        logicalFrameWidth: spr.logicalFrameWidth || spr.sourceFrameWidth || spr.frameWidth,
+        logicalFrameHeight: spr.logicalFrameHeight || spr.sourceFrameHeight || spr.frameHeight,
+        workspaceMode: 'infinite-centered',
       };
     }
     try {
@@ -2056,6 +2430,14 @@ export class SpriteEditor {
           skill.effectSpriteKey = spr.key;
         } else if (spr.spriteRole === 'skillCast') {
           skill.castSpriteKey = spr.key;
+        } else if (spr.spriteRole === 'skillTargetHitEffect') {
+          if (!skill.impactConfig) skill.impactConfig = {};
+          if (!skill.impactConfig.targetHitEffect) skill.impactConfig.targetHitEffect = {};
+          skill.impactConfig.targetHitEffect.effectKey = spr.key;
+        } else if (spr.spriteRole === 'skillReceiveHitEffect') {
+          if (!skill.impactConfig) skill.impactConfig = {};
+          if (!skill.impactConfig.receiveHitEffect) skill.impactConfig.receiveHitEffect = {};
+          skill.impactConfig.receiveHitEffect.effectKey = spr.key;
         }
         this.dm.save();
       }
@@ -2093,26 +2475,21 @@ export class SpriteEditor {
         const img = new Image();
         img.onload = () => {
           const spr = this.selectedSprite;
-          // Validate dimensions for spritesheets
-          if (spr.type === 'spritesheet') {
-            if (img.height !== spr.frameHeight) {
-              if (window.showToast) window.showToast(`높이가 ${spr.frameHeight}px 이어야 합니다. (현재: ${img.height}px)`, 'error');
-              return;
-            }
-            if (img.width % spr.frameWidth !== 0) {
-              if (window.showToast) window.showToast(`너비가 ${spr.frameWidth}의 배수여야 합니다. (현재: ${img.width}px)`, 'error');
-              return;
-            }
-            // Auto-detect frame count
-            const detectedFrames = img.width / spr.frameWidth;
-            if (detectedFrames !== spr.frames) {
-              if (window.showToast) window.showToast(`프레임 수가 다릅니다. (예상: ${spr.frames}, 감지: ${detectedFrames})`, 'info');
-            }
+          const logicalW = spr.logicalFrameWidth || spr.sourceFrameWidth || spr.frameWidth || img.width;
+          const logicalH = spr.logicalFrameHeight || spr.sourceFrameHeight || spr.frameHeight || img.height;
+          const expectedFrames = Math.max(1, spr.frames || 1);
+          const sourceFrameW = spr.type === 'spritesheet'
+            ? (img.width % logicalW === 0 ? logicalW : Math.max(1, Math.floor(img.width / expectedFrames)))
+            : img.width;
+          const sourceFrameH = spr.type === 'spritesheet' && img.height >= logicalH ? logicalH : img.height;
+          const detectedFrames = Math.max(1, spr.type === 'spritesheet' ? Math.floor(img.width / sourceFrameW) : 1);
+          if (spr.type === 'spritesheet' && detectedFrames !== spr.frames && window.showToast) {
+            window.showToast(`PNG 프레임 수가 다릅니다. 예상: ${spr.frames}, 감지: ${detectedFrames}`, 'info');
           }
 
           this._pushUndo();
-          this._initNativeCanvas(img.width, img.height);
-          this.nativeCtx.drawImage(img, 0, 0);
+          this._initNativeCanvas(spr.frameWidth * Math.max(1, spr.frames || detectedFrames), spr.frameHeight);
+          this._drawImageFramesToWorkspace(img, sourceFrameW, sourceFrameH, detectedFrames, spr);
           this._redrawDisplay();
           if (window.showToast) window.showToast('PNG 업로드 완료', 'success');
         };
@@ -2183,13 +2560,34 @@ export class SpriteEditor {
   _handleKeyboard(e) {
     // Only handle when sprite editor is active
     if (!this.container || !this.container.classList.contains('active')) return;
+    const tag = e.target?.tagName?.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
-    if (e.ctrlKey && e.key === 'z') {
+    const key = e.key.toLowerCase();
+    if (e.ctrlKey && key === 'z') {
       e.preventDefault();
       this._undo();
-    } else if (e.ctrlKey && e.key === 'y') {
+    } else if (e.ctrlKey && key === 'y') {
       e.preventDefault();
       this._redo();
+    } else if (e.ctrlKey && key === 'c') {
+      e.preventDefault();
+      this._copyFrame();
+    } else if (e.ctrlKey && key === 'v') {
+      e.preventDefault();
+      this._pasteFrame();
+    } else if (e.altKey && e.key === 'ArrowUp') {
+      e.preventDefault();
+      this._shiftFrame(0, -1);
+    } else if (e.altKey && e.key === 'ArrowDown') {
+      e.preventDefault();
+      this._shiftFrame(0, 1);
+    } else if (e.altKey && e.key === 'ArrowLeft') {
+      e.preventDefault();
+      this._shiftFrame(-1, 0);
+    } else if (e.altKey && e.key === 'ArrowRight') {
+      e.preventDefault();
+      this._shiftFrame(1, 0);
     }
   }
 
@@ -2229,11 +2627,11 @@ export class SpriteEditor {
           <div class="form-row" style="display:flex;gap:10px;">
             <div class="form-group" style="flex:1;">
               <label>프레임 너비 (px)</label>
-              <input type="number" id="newSprFrameW" value="64" min="8" max="256">
+              <input type="number" id="newSprFrameW" value="32" min="1" max="4096">
             </div>
             <div class="form-group" style="flex:1;">
               <label>프레임 높이 (px)</label>
-              <input type="number" id="newSprFrameH" value="64" min="8" max="256">
+              <input type="number" id="newSprFrameH" value="64" min="1" max="4096">
             </div>
           </div>
           <div class="form-group">
@@ -2269,24 +2667,26 @@ export class SpriteEditor {
       }
 
       const category = overlay.querySelector('#newSprCategory').value;
-      const frameW = parseInt(overlay.querySelector('#newSprFrameW').value) || 64;
-      const frameH = parseInt(overlay.querySelector('#newSprFrameH').value) || 64;
+      const frameW = parseInt(overlay.querySelector('#newSprFrameW').value) || DEFAULT_ACTOR_WIDTH;
+      const frameH = parseInt(overlay.querySelector('#newSprFrameH').value) || DEFAULT_ACTOR_HEIGHT;
       const frames = parseInt(overlay.querySelector('#newSprFrames').value) || 1;
       const type = frames > 1 ? 'spritesheet' : 'static';
 
       // Add to registry
-      const newEntry = {
+      const newEntry = this._ensureRegistryEntry({
         key: name,
         category,
         name,
         path: null,
         frameWidth: frameW,
         frameHeight: frameH,
+        logicalFrameWidth: frameW,
+        logicalFrameHeight: frameH,
+        workspaceMode: 'infinite-centered',
         frames,
         type,
         isCustom: true,
-      };
-      SPRITE_REGISTRY.push(newEntry);
+      });
 
       // Handle file upload or blank canvas
       const file = overlay.querySelector('#newSprFile').files[0];
@@ -2296,18 +2696,40 @@ export class SpriteEditor {
           const img = new Image();
           img.onload = () => {
             const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
+            canvas.width = frameW * frames;
+            canvas.height = frameH;
             const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
+            ctx.imageSmoothingEnabled = false;
+            const sourceFrameW = type === 'spritesheet'
+              ? (img.width % frameW === 0 ? frameW : Math.max(1, Math.floor(img.width / frames)))
+              : img.width;
+            const sourceFrameH = type === 'spritesheet' && img.height >= frameH ? frameH : img.height;
+            const availableFrames = Math.max(1, Math.floor(img.width / sourceFrameW));
+            for (let frame = 0; frame < frames; frame++) {
+              const sourceFrame = Math.min(frame, availableFrames - 1);
+              ctx.drawImage(
+                img,
+                sourceFrame * sourceFrameW,
+                0,
+                Math.min(sourceFrameW, img.width - sourceFrame * sourceFrameW),
+                Math.min(sourceFrameH, img.height),
+                frame * frameW,
+                0,
+                frameW,
+                frameH
+              );
+            }
 
             const customs = this._getCustomSprites();
             customs[name] = {
               dataUrl: canvas.toDataURL('image/png'),
-              width: img.width,
-              height: img.height,
+              width: canvas.width,
+              height: canvas.height,
               frameWidth: frameW,
               frameHeight: frameH,
+              logicalFrameWidth: frameW,
+              logicalFrameHeight: frameH,
+              workspaceMode: 'infinite-centered',
               category,
             };
             localStorage.setItem(CUSTOM_SPRITES_KEY, JSON.stringify(customs));
@@ -2338,6 +2760,9 @@ export class SpriteEditor {
           height: h,
           frameWidth: frameW,
           frameHeight: frameH,
+          logicalFrameWidth: frameW,
+          logicalFrameHeight: frameH,
+          workspaceMode: 'infinite-centered',
           category,
         };
         localStorage.setItem(CUSTOM_SPRITES_KEY, JSON.stringify(customs));

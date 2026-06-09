@@ -3,14 +3,13 @@
 // =============================================================================
 
 import { getGameData } from '../../data/GameDataLoader.js';
-import { SHOP_CONSUMABLES_BY_ID, WEAPON_SHOP_ITEMS, GENERAL_SHOP_ITEMS } from '../data/shopData.js';
 
 /**
  * Resolve an item definition by ID, checking both the game data items
  * and the shop-exclusive consumables.
  */
 function getItemData(itemId) {
-  return getGameData().items[itemId] || SHOP_CONSUMABLES_BY_ID[itemId] || null;
+  return getGameData().items[itemId] || null;
 }
 
 export default class ShopSystem {
@@ -63,7 +62,7 @@ export default class ShopSystem {
     if (shopData) {
       this.shopItems = shopData.map(s => ({ ...s }));
     } else {
-      const source = shopType === 'weapon' ? WEAPON_SHOP_ITEMS : GENERAL_SHOP_ITEMS;
+      const source = getGameData().shops?.[this.shopType]?.items || [];
       this.shopItems = source.map(s => ({ ...s }));
     }
 
@@ -507,7 +506,7 @@ export default class ShopSystem {
   /** @private Get sell price for an item (50% of buy price or a base value) */
   _getSellPrice(itemId) {
     // Check if item is in any shop's inventory for a base price
-    const allShopItems = [...WEAPON_SHOP_ITEMS, ...GENERAL_SHOP_ITEMS];
+    const allShopItems = Object.values(getGameData().shops || {}).flatMap(shop => shop.items || []);
     const shopEntry = allShopItems.find(s => s.itemId === itemId);
     if (shopEntry) {
       return Math.floor(shopEntry.price * 0.5);

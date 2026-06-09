@@ -31,8 +31,8 @@ export default class NPC extends Phaser.Physics.Arcade.Sprite {
 
     // Immovable NPC body
     this.body.setImmovable(true);
-    this.body.setSize(32, 40);
-    this.body.setOffset(16, 20);
+    this.body.setSize(32, 32);
+    this.body.setOffset(0, 16);
     this.setDepth(9);
 
     // --- NPC Data ---

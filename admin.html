@@ -272,7 +272,7 @@
     .tab:hover { color: var(--text); }
 
     /* Map Editor */
-    .map-editor-layout { display: flex; gap: 16px; }
+    .map-editor-layout { display: flex; gap: 16px; min-height: 0; height: calc(100vh - 190px); }
     .tile-palette {
       width: 180px; flex-shrink: 0;
       background: var(--bg-card); border: 1px solid var(--border);
@@ -287,9 +287,9 @@
     .tile-swatch.selected { border-color: var(--gold-bright); box-shadow: 0 0 6px var(--gold); }
     .map-canvas-container {
       flex: 1; background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 6px; overflow: hidden; position: relative;
+      border-radius: 6px; overflow: auto; position: relative; min-width: 0;
     }
-    .map-canvas-container canvas { display: block; cursor: crosshair; }
+    .map-canvas-container canvas { display: block; cursor: crosshair; image-rendering: pixelated; }
 
     /* Skill Tree */
     .skill-tree-container {
@@ -383,6 +383,7 @@
     <div class="sidebar-item" data-section="skills"><span class="icon">SK</span><span>스킬 관리</span></div>
     <div class="sidebar-item" data-section="character"><span class="icon">PC</span><span>메인 캐릭터 관리</span></div>
     <div class="sidebar-item" data-section="monsters"><span class="icon">MO</span><span>몬스터 관리</span></div>
+    <div class="sidebar-item" data-section="npcs"><span class="icon">NP</span><span>NPC 관리</span></div>
     <div class="sidebar-item" data-section="maps"><span class="icon">MP</span><span>맵 에디터</span></div>
     <div class="sidebar-item" data-section="sprites"><span class="icon">SP</span><span>스프라이트 관리</span></div>
     <div class="sidebar-item" data-section="quests"><span class="icon">QU</span><span>퀘스트 관리</span></div>
@@ -401,6 +402,7 @@
     <div class="section" id="section-skills"></div>
     <div class="section" id="section-character"></div>
     <div class="section" id="section-monsters"></div>
+    <div class="section" id="section-npcs"></div>
     <div class="section" id="section-maps"></div>
     <div class="section" id="section-sprites"></div>
     <div class="section" id="section-quests"></div>

@@ -1,5 +1,5 @@
 // =============================================================================
-// Player.js - Player Entity Class (64x64 HD with equipment layers)
+// Player.js - Player Entity Class (32x64 actor, 32x32 collision)
 // =============================================================================
 
 import Phaser from 'phaser';
@@ -59,8 +59,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     this.setCollideWorldBounds(true);
     this.setDepth(10);
-    this.body.setSize(32, 40);
-    this.body.setOffset(16, 20);
+    this.body.setSize(32, 32);
+    this.body.setOffset(0, 16);
 
     // Play initial idle animation if available
     if (scene.anims.exists('player_idle_down')) {
@@ -347,9 +347,28 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   // Basic Attack (Spacebar)
   // ==========================================================================
 
+  _getBasicAttackSkill() {
+    const skills = getGameData().skills || {};
+    return skills.skill_basic_attack
+      || Object.values(skills).find(skill => skill?.isBasicAttack || skill?.inputBinding === 'SPACE')
+      || skills.skill_slash
+      || null;
+  }
+
+  _getBasicAttackAction(skill) {
+    const actions = getGameData().combatActions || [];
+    return actions.find(action => action.skill_id === skill?.id)
+      || actions.find(action => action.id === skill?.action_id)
+      || actions.find(action => action.inputBinding === 'SPACE')
+      || actions.find(action => action.id === 'action_basic_slash')
+      || null;
+  }
+
   performBasicAttack() {
     const now = Date.now();
     const computed = this.getComputedStats();
+    const attackSkill = this._getBasicAttackSkill();
+    const attackAction = this._getBasicAttackAction(attackSkill);
 
     // Get weapon proficiency attack speed bonus
     let atkSpdProfBonus = 0;
@@ -360,7 +379,11 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     const totalAtkSpd = (computed.ATK_SPEED || 0) + atkSpdProfBonus;
-    const cd = Math.max(200, this.attackCooldown - totalAtkSpd * 2);
+    const actionCooldown = attackAction
+      ? (attackAction.startup_ms || 0) + (attackAction.active_ms || 0) + (attackAction.recovery_ms || 0)
+      : null;
+    const baseCooldown = attackSkill?.cooldown ?? actionCooldown ?? this.attackCooldown;
+    const cd = Math.max(120, baseCooldown - totalAtkSpd * 2);
 
     if (now - this.lastAttackTime < cd) return null;
     if (this.isAttacking) return null;
@@ -393,20 +416,25 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     // Find nearest monster in attack range (directional cone)
-    const target = this._findAttackTarget();
+    const target = this._findAttackTarget(attackSkill);
 
     // Gain weapon proficiency
     this._updateProficiencyBonus();
     if (weapon && weapon.weaponType && this.scene.proficiencySystem) {
-      this.scene.proficiencySystem.gainProficiency('weapon', weapon.weaponType, 3);
+      this.scene.proficiencySystem.gainProficiency('weapon', weapon.weaponType, attackSkill?.proficiencyGain || 3);
     }
+    if (attackSkill?.id && this.scene.proficiencySystem) {
+      this.scene.proficiencySystem.gainProficiency('skill', attackSkill.id, attackSkill.proficiencyGain || 1);
+    }
+
+    const lungeDuration = Math.max(40, Math.min(160, attackAction?.startup_ms || 80));
 
     // Lunge forward
     this.scene.tweens.add({
       targets: this,
       x: this.x + dx,
       y: this.y + dy,
-      duration: 80,
+      duration: lungeDuration,
       yoyo: true,
       ease: 'Power2',
       onComplete: () => {
@@ -420,10 +448,11 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       const ty = target.y;
 
       // Delay impact to lunge peak (80ms) so effect appears on monster
-      this.scene.time.delayedCall(60, () => {
-        const result = this.scene.combatSystem.performAttack(this, target);
+      const impactDelay = Math.max(0, Math.min(140, Math.floor((attackAction?.startup_ms || 120) * 0.5)));
+      this.scene.time.delayedCall(impactDelay, () => {
+        const result = this.scene.combatSystem.performAttack(this, target, attackSkill);
         if (result && result.hit && this.scene.impactSystem) {
-          this.scene.impactSystem.playBasicAttack(this, target, weapon);
+          this.scene.impactSystem.playBasicAttack(this, target, weapon, attackSkill);
           target.provoke();
         }
         this.scene.events.emit('player-stats-changed');
@@ -432,14 +461,14 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       return { pending: true };
     } else {
       // Swing in air
-      this.scene.impactSystem.playWhiff(this);
+      this.scene.impactSystem.playWhiff(this, attackSkill);
     }
 
     return null;
   }
 
-  _findAttackTarget() {
-    const range = 60;
+  _findAttackTarget(attackSkill = null) {
+    const range = attackSkill?.range || 60;
     let closest = null;
     let closestDist = range;
 
@@ -471,7 +500,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       for (const monster of this.scene.monsters.getChildren()) {
         if (monster.isDead) continue;
         const dist = Phaser.Math.Distance.Between(this.x, this.y, monster.x, monster.y);
-        if (dist < 45 && dist < closestDist) {
+        if (dist < Math.min(45, range) && dist < closestDist) {
           closest = monster;
           closestDist = dist;
         }
@@ -487,20 +516,28 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
   attack(target) {
     const now = Date.now();
-    if (now - this.lastAttackTime < this.attackCooldown) return null;
+    const attackSkill = this._getBasicAttackSkill();
+    const attackAction = this._getBasicAttackAction(attackSkill);
+    const actionCooldown = attackAction
+      ? (attackAction.startup_ms || 0) + (attackAction.active_ms || 0) + (attackAction.recovery_ms || 0)
+      : null;
+    if (now - this.lastAttackTime < (attackSkill?.cooldown ?? actionCooldown ?? this.attackCooldown)) return null;
     this.lastAttackTime = now;
 
     this._updateProficiencyBonus();
 
     const weapon = this.equipment.WEAPON;
     if (weapon && weapon.weaponType && this.scene.proficiencySystem) {
-      this.scene.proficiencySystem.gainProficiency('weapon', weapon.weaponType, 3);
+      this.scene.proficiencySystem.gainProficiency('weapon', weapon.weaponType, attackSkill?.proficiencyGain || 3);
+    }
+    if (attackSkill?.id && this.scene.proficiencySystem) {
+      this.scene.proficiencySystem.gainProficiency('skill', attackSkill.id, attackSkill.proficiencyGain || 1);
     }
 
-    const result = this.scene.combatSystem.performAttack(this, target);
+    const result = this.scene.combatSystem.performAttack(this, target, attackSkill);
 
     if (result && result.hit && this.scene.impactSystem) {
-      this.scene.impactSystem.playBasicAttack(this, target, weapon);
+      this.scene.impactSystem.playBasicAttack(this, target, weapon, attackSkill);
     }
 
     return result;

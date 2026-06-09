@@ -7,14 +7,12 @@ import BootScene from './scenes/BootScene.js';
 import PreloadScene from './scenes/PreloadScene.js';
 import WorldScene from './scenes/WorldScene.js';
 import UIScene from './scenes/UIScene.js';
-import VillageScene from './scenes/VillageScene.js';
-import DarkForestScene from './scenes/DarkForestScene.js';
 
 // --- Game Configuration ---
 const config = {
   type: Phaser.CANVAS,
-  width: 1024,
-  height: 768,
+  width: 960,
+  height: 540,
   parent: 'game-container',
   backgroundColor: '#0a0a1a',
   pixelArt: true,
@@ -26,7 +24,7 @@ const config = {
       debug: false,
     },
   },
-  scene: [BootScene, PreloadScene, WorldScene, UIScene, VillageScene, DarkForestScene],
+  scene: [BootScene, PreloadScene, WorldScene, UIScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -46,8 +44,8 @@ function handleResize() {
   const w = window.innerWidth;
   const h = window.innerHeight;
 
-  // Maintain aspect ratio
-  const ratio = 1024 / 768;
+  // Maintain 16:9 game resolution.
+  const ratio = 960 / 540;
   let newWidth = w;
   let newHeight = w / ratio;
 

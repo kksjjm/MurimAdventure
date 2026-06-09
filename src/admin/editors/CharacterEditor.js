@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { STATS } from '../../data/constants.js';
+import { bindSpriteSelect, spriteSelectHtml } from '../components/SpriteSelect.js';
 
 export class CharacterEditor {
   constructor(dataManager) {
@@ -62,7 +63,7 @@ export class CharacterEditor {
         <div class="form-row">
           <div class="form-group">
             <label>기본 스프라이트 키</label>
-            <input type="text" id="charSpriteKey" value="${character.spriteKey || 'player_base'}" placeholder="player_base">
+            ${spriteSelectHtml({ id: 'charSpriteKey', value: character.spriteKey || 'player_base', placeholder: '메인 캐릭터 스프라이트 검색...' })}
             <small style="color:var(--text-dim);font-size:11px;">스프라이트 관리 > 메인 캐릭터에서 player_base를 수정하면 인게임 플레이어 박스 외형에 반영됩니다.</small>
           </div>
           <div class="form-group">
@@ -90,6 +91,11 @@ export class CharacterEditor {
     `;
 
     this._drawPreview(container.querySelector('#charPreviewCanvas'));
+    bindSpriteSelect(container, 'charSpriteKey', {
+      allowEmpty: false,
+      onInput: () => this._drawPreview(container.querySelector('#charPreviewCanvas')),
+      onSelect: () => this._drawPreview(container.querySelector('#charPreviewCanvas')),
+    });
 
     container.querySelector('#saveCharacterBtn').onclick = () => {
       this.dm.data.mainCharacter = {

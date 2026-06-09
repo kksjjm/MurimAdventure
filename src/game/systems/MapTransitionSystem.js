@@ -2,16 +2,9 @@
 // MapTransitionSystem.js - Handles transitions between maps
 // =============================================================================
 
-import { getMapData } from '../data/mapData.js';
+import { getGameData, normalizeMapId } from '../../data/GameDataLoader.js';
 
 const FADE_DURATION = 500; // ms
-
-// Map ID -> Scene key mapping
-const MAP_TO_SCENE = {
-  field_01: 'WorldScene',
-  village_01: 'VillageScene',
-  dark_forest: 'DarkForestScene',
-};
 
 export default class MapTransitionSystem {
   /**
@@ -25,18 +18,12 @@ export default class MapTransitionSystem {
     if (currentScene._mapTransitionInProgress) return;
     currentScene._mapTransitionInProgress = true;
     currentScene._transitioning = true;
+    const normalizedTargetMapId = normalizeMapId(targetMapId);
 
-    const targetSceneKey = MAP_TO_SCENE[targetMapId];
-    if (!targetSceneKey) {
-      console.warn(`[MapTransition] Unknown map ID: ${targetMapId}`);
-      currentScene._transitioning = false;
-      currentScene._mapTransitionInProgress = false;
-      return;
-    }
-
-    const mapData = getMapData(targetMapId);
+    const maps = getGameData().maps || [];
+    const mapData = maps.find(map => normalizeMapId(map?.id) === normalizedTargetMapId);
     if (!mapData) {
-      console.warn(`[MapTransition] No map data for: ${targetMapId}`);
+      console.warn(`[MapTransition] No admin-managed map data for: ${targetMapId}`);
       currentScene._transitioning = false;
       currentScene._mapTransitionInProgress = false;
       return;
@@ -47,7 +34,8 @@ export default class MapTransitionSystem {
       spawnX: targetX,
       spawnY: targetY,
       fromMap: currentScene.mapId || 'unknown',
-      mapId: targetMapId,
+      mapId: normalizedTargetMapId,
+      portalCooldownMs: 900,
     };
 
     // If the current scene has a player, carry stats
@@ -77,15 +65,21 @@ export default class MapTransitionSystem {
     // Fade out
     currentScene.cameras.main.fadeOut(FADE_DURATION, 0, 0, 0);
 
-    currentScene.cameras.main.once('camerafadeoutcomplete', () => {
+    let didStartTargetScene = false;
+    const startTargetScene = () => {
+      if (didStartTargetScene) return;
+      didStartTargetScene = true;
+      if (!currentScene.scene || !currentScene.scene.isActive('WorldScene')) return;
       // Stop UI scene if running
       if (currentScene.scene.isActive('UIScene')) {
         currentScene.scene.stop('UIScene');
       }
 
-      // Stop current scene and start target
-      currentScene.scene.start(targetSceneKey, carryData);
-    });
+      currentScene.scene.start('WorldScene', carryData);
+    };
+
+    currentScene.cameras.main.once('camerafadeoutcomplete', startTargetScene);
+    currentScene.time.delayedCall(FADE_DURATION + 250, startTargetScene);
   }
 
   /**

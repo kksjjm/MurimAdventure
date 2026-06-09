@@ -1,11 +1,13 @@
 // =============================================================================
-// BootScene.js - Generate all placeholder pixel art textures (64x64 HD)
+// BootScene.js - Generate all placeholder pixel art textures
 // =============================================================================
 
 import Phaser from 'phaser';
 import CustomSpriteLoader from '../systems/CustomSpriteLoader.js';
 
-const CHAR_SIZE = 64;  // Character sprite size
+const ACTOR_WIDTH = 32;
+const ACTOR_HEIGHT = 64;
+const CHAR_SIZE = ACTOR_HEIGHT; // Legacy helper size for older generated overlays.
 const TILE_SIZE = 32;  // Tile texture size
 const ICON_SIZE = 16;  // Item icon size
 const FX_SIZE = 96;    // Impact effect size
@@ -38,6 +40,7 @@ export default class BootScene extends Phaser.Scene {
         return true;
       },
     }).then(() => {
+      this._createEffectAnimations();
       this._createBoxAnimations();
       this.scene.start('PreloadScene');
     });
@@ -45,21 +48,23 @@ export default class BootScene extends Phaser.Scene {
 
   _generateBoxSprites() {
     const makeBox = (key, fill, edge, label) => {
-      this._genTex(key, CHAR_SIZE, CHAR_SIZE, (g) => {
+      this._genTex(key, ACTOR_WIDTH, ACTOR_HEIGHT, (g) => {
         g.fillStyle(0x000000, 0.25);
-        g.fillRect(14, 52, 36, 6);
+        g.fillRect(2, 58, 28, 4);
         g.fillStyle(fill, 1);
-        g.fillRect(16, 16, 32, 32);
-        g.lineStyle(3, edge, 1);
-        g.strokeRect(16, 16, 32, 32);
+        g.fillRect(0, 0, 32, 64);
+        g.lineStyle(2, edge, 1);
+        g.strokeRect(1, 1, 30, 62);
         g.fillStyle(0xffffff, 0.9);
-        g.fillRect(24, 28, 6, 6);
-        g.fillRect(34, 28, 6, 6);
+        g.fillRect(7, 18, 5, 5);
+        g.fillRect(20, 18, 5, 5);
         g.fillStyle(edge, 1);
-        g.fillRect(25, 29, 3, 3);
-        g.fillRect(35, 29, 3, 3);
+        g.fillRect(8, 19, 2, 2);
+        g.fillRect(21, 19, 2, 2);
         g.fillStyle(0x111827, 1);
-        g.fillRect(26, 40, 12, 3);
+        g.fillRect(10, 34, 12, 3);
+        g.lineStyle(1, 0xfacc15, 0.9);
+        g.strokeRect(0, 32, 32, 32);
       });
     };
 
@@ -71,17 +76,19 @@ export default class BootScene extends Phaser.Scene {
 
     const npcKeys = ['npc_elder', 'npc_blacksmith', 'npc_merchant', 'npc_guard', 'npc_herbalist'];
     for (const key of npcKeys) {
-      this._genTex(key, CHAR_SIZE, CHAR_SIZE, (g) => {
+      this._genTex(key, ACTOR_WIDTH, ACTOR_HEIGHT, (g) => {
         g.fillStyle(0x000000, 0.25);
-        g.fillRect(14, 52, 36, 6);
+        g.fillRect(2, 58, 28, 4);
         g.fillStyle(0x16a34a, 1);
-        g.fillRect(16, 16, 32, 32);
-        g.lineStyle(3, 0x86efac, 1);
-        g.strokeRect(16, 16, 32, 32);
+        g.fillRect(0, 0, 32, 64);
+        g.lineStyle(2, 0x86efac, 1);
+        g.strokeRect(1, 1, 30, 62);
         g.fillStyle(0xffffff, 1);
-        g.fillRect(25, 29, 5, 5);
-        g.fillRect(34, 29, 5, 5);
-        g.fillRect(27, 40, 10, 3);
+        g.fillRect(7, 18, 5, 5);
+        g.fillRect(20, 18, 5, 5);
+        g.fillRect(11, 34, 10, 3);
+        g.lineStyle(1, 0xfacc15, 0.9);
+        g.strokeRect(0, 32, 32, 32);
       });
     }
   }
@@ -117,6 +124,52 @@ export default class BootScene extends Phaser.Scene {
           });
         }
       }
+    }
+  }
+
+  _createEffectAnimations() {
+    const customSprites = CustomSpriteLoader.getCustomSprites();
+    const builtInEffectKeys = [
+      'fx_slash',
+      'fx_heavy_slash',
+      'fx_hit_receive',
+      'fx_fist',
+      'fx_qi_wave',
+      'fx_fire',
+      'fx_ice',
+      'fx_lightning',
+      'fx_dark',
+      'fx_heal',
+      'skill_effect_red',
+      'skill_effect_blue',
+      'skill_effect_green',
+      'skill_effect_yellow',
+      'skill_effect_purple',
+    ];
+    const customEffectKeys = Object.keys(customSprites).filter((key) => (
+      /^fx_/.test(key)
+      || /^skill_fx_/.test(key)
+      || /^skill_effect_/.test(key)
+      || /_cast$/.test(key)
+      || /_hit$/.test(key)
+      || /_receive$/.test(key)
+    ));
+
+    for (const key of [...new Set([...builtInEffectKeys, ...customEffectKeys])]) {
+      if (!this.textures.exists(key)) continue;
+      const tex = this.textures.get(key);
+      const frameCount = Math.max(0, tex.frameTotal - 1);
+      if (frameCount <= 1) continue;
+
+      const animKey = `${key}_anim`;
+      if (this.anims.exists(animKey)) this.anims.remove(animKey);
+      const frameRate = Number(customSprites[key]?.frameRate) || 12;
+      this.anims.create({
+        key: animKey,
+        frames: this.anims.generateFrameNumbers(key, { start: 0, end: frameCount - 1 }),
+        frameRate,
+        repeat: 0,
+      });
     }
   }
 
@@ -1221,6 +1274,27 @@ export default class BootScene extends Phaser.Scene {
       g.fillCircle(cx, cy, 3);
     });
 
+    // --- Hit Receive (피격) ---
+    this._genTex('fx_hit_receive', s, s, (g) => {
+      g.fillStyle(0xffffff, 0.18);
+      g.fillCircle(cx, cy, 30);
+      g.fillStyle(0xff4444, 0.35);
+      g.fillCircle(cx, cy, 20);
+      g.fillStyle(0xffffff, 0.85);
+      g.fillCircle(cx, cy, 6);
+      const rays = 8;
+      for (let i = 0; i < rays; i++) {
+        const angle = (i / rays) * Math.PI * 2;
+        g.lineStyle(3, 0xffeeee, 0.75);
+        g.lineBetween(
+          cx + Math.cos(angle) * 10,
+          cy + Math.sin(angle) * 10,
+          cx + Math.cos(angle) * 32,
+          cy + Math.sin(angle) * 32
+        );
+      }
+    });
+
     // --- Fist Impact (주먹/철권) ---
     this._genTex('fx_fist', s, s, (g) => {
       // Shockwave ring
@@ -1873,6 +1947,10 @@ export default class BootScene extends Phaser.Scene {
   // ==========================================================================
 
   _genTex(key, w, h, drawFn) {
+    const isAdminEffectSprite = /^fx_/.test(key) || /^skill_fx_/.test(key) || /^skill_effect_/.test(key);
+    if (isAdminEffectSprite && CustomSpriteLoader.hasCustomSprite(key)) {
+      return;
+    }
     const g = this.add.graphics();
     drawFn(g);
     g.generateTexture(key, w, h);

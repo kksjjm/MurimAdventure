@@ -16,8 +16,13 @@ export default class PreloadScene extends Phaser.Scene {
     // --- Background ---
     this.cameras.main.setBackgroundColor('#0a0a1a');
 
+    const gameData = loadGameData();
+    this._validateData(gameData);
+    const gameTitle = gameData.gameSettings?.gameTitle || '모두의 RPG';
+    const genre = gameData.gameSettings?.genre || 'Realtime Modular ARPG';
+
     // --- Title ---
-    this.add.text(width / 2, height / 2 - 80, '모두의 RPG', {
+    this.add.text(width / 2, height / 2 - 80, gameTitle, {
       fontSize: '48px',
       fontFamily: 'serif',
       color: '#ffcc66',
@@ -25,7 +30,7 @@ export default class PreloadScene extends Phaser.Scene {
       strokeThickness: 4,
     }).setOrigin(0.5);
 
-    this.add.text(width / 2, height / 2 - 30, 'Realtime Modular ARPG', {
+    this.add.text(width / 2, height / 2 - 30, genre, {
       fontSize: '18px',
       fontFamily: 'monospace',
       color: '#aaaacc',
@@ -45,24 +50,24 @@ export default class PreloadScene extends Phaser.Scene {
 
     const barFill = this.add.graphics();
 
-    const statusText = this.add.text(width / 2, barY + barHeight + 20, '새 기획 데이터 로딩 중...', {
+    const statusText = this.add.text(width / 2, barY + barHeight + 20, '관리자 데이터 로딩 중...', {
       fontSize: '12px',
       fontFamily: 'monospace',
       color: '#888899',
     }).setOrigin(0.5);
 
     // --- Simulate loading steps ---
+    const itemCount = Object.keys(gameData.items || {}).length;
+    const monsterCount = Object.keys(gameData.monsters || {}).length;
+    const skillCount = Object.keys(gameData.skills || {}).length;
+    const mapCount = (gameData.maps || []).length;
     const steps = [
-      { text: '모듈/테이블 설계 로딩...', progress: 0.2 },
-      { text: '아이템/몬스터 템플릿 로딩...', progress: 0.4 },
-      { text: '스킬/전투 액션 로딩...', progress: 0.6 },
-      { text: '박스 스프라이트 초기화...', progress: 0.8 },
-      { text: '로딩 완료!', progress: 1.0 },
+      { text: `맵 ${mapCount}개 로딩`, progress: 0.2 },
+      { text: `아이템 ${itemCount}개 / 몬스터 ${monsterCount}개 로딩`, progress: 0.4 },
+      { text: `스킬 ${skillCount}개 및 전투 액션 로딩`, progress: 0.6 },
+      { text: '관리자 스프라이트 연결 확인', progress: 0.8 },
+      { text: '로딩 완료', progress: 1.0 },
     ];
-
-    // Load game data (admin localStorage → defaults fallback)
-    const gameData = loadGameData();
-    this._validateData(gameData);
 
     // Store data on registry for access across scenes
     this.registry.set('items', gameData.items);

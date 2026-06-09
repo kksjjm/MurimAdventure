@@ -5,6 +5,7 @@
 import {
   STATS, EQUIPMENT_SLOTS, WEAPON_TYPES, ITEM_RARITY, ITEM_TYPES
 } from '../../data/constants.js';
+import { bindSpriteSelect, spriteSelectHtml } from '../components/SpriteSelect.js';
 
 const EQUIP_ANIM_SETS = [
   { type: 'idle', nameKo: '대기', dirs: ['down', 'side', 'up'], frames: [4, 4, 4] },
@@ -203,14 +204,11 @@ export class ItemEditor {
             <div class="form-row">
               <div class="form-group">
                 <label>아이콘</label>
-                <input type="text" id="editItemIcon" value="${item.icon || ''}" placeholder="icon_sword">
+                ${spriteSelectHtml({ id: 'editItemIcon', value: item.icon || '', placeholder: '아이콘 스프라이트 검색...' })}
               </div>
               <div class="form-group">
                 <label>스프라이트 키</label>
-                <div style="position:relative;">
-                  <input type="text" id="editItemSpriteKey" value="${item.spriteKey || ''}" placeholder="검색 또는 직접 입력..." autocomplete="off">
-                  <div id="spriteDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;max-height:200px;overflow-y:auto;background:var(--bg-card);border:1px solid var(--border);border-radius:4px;z-index:100;"></div>
-                </div>
+                ${spriteSelectHtml({ id: 'editItemSpriteKey', value: item.spriteKey || '', placeholder: '장비/아이템 스프라이트 검색...' })}
                 <div id="spritePreviewBox" style="margin-top:6px;min-height:40px;display:flex;align-items:center;gap:8px;">
                   ${item.spriteKey ? `<span style="color:var(--text-dim);font-size:11px;">미리보기 로딩 중...</span>` : '<span style="color:var(--text-dim);font-size:10px;">장비 착용 시 캐릭터에 표시될 스프라이트</span>'}
                 </div>
@@ -296,7 +294,19 @@ export class ItemEditor {
     this._bindEffectRemove(overlay);
 
     // Sprite key dropdown + preview
-    this._initSpriteSelector(overlay);
+    bindSpriteSelect(overlay, 'editItemIcon');
+    bindSpriteSelect(overlay, 'editItemSpriteKey', {
+      onInput: (key) => {
+        this._updateSpritePreview(overlay.querySelector('#spritePreviewBox'), key);
+        this._updateEquipAnimStatus(key);
+      },
+      onSelect: (key) => {
+        this._updateSpritePreview(overlay.querySelector('#spritePreviewBox'), key);
+        this._updateEquipAnimStatus(key);
+      },
+    });
+    this._updateSpritePreview(overlay.querySelector('#spritePreviewBox'), overlay.querySelector('#editItemSpriteKey')?.value || '');
+    this._updateEquipAnimStatus(overlay.querySelector('#editItemSpriteKey')?.value || '');
 
     // Live preview update
     const updatePreviewFromForm = () => {

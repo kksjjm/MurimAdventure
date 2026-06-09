@@ -5,6 +5,7 @@
 import {
   SKILL_CATEGORIES, MUGONG_TYPES, JUSUL_TYPES, ELEMENT_TYPES, STATS, EFFECT_TYPES, DAMAGE_TYPES
 } from '../../data/constants.js';
+import { bindSpriteSelect, spriteSelectHtml } from '../components/SpriteSelect.js';
 
 export class SkillEditor {
   constructor(dataManager) {
@@ -158,6 +159,9 @@ export class SkillEditor {
     ).join('');
 
     const effectJson = skill.effect ? JSON.stringify(skill.effect, null, 2) : '';
+    const impactConfigJson = skill.impactConfig ? JSON.stringify(skill.impactConfig, null, 2) : '';
+    const targetHitEffectKey = skill.impactConfig?.targetHitEffect?.effectKey || '';
+    const receiveHitEffectKey = skill.impactConfig?.receiveHitEffect?.effectKey || '';
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -199,13 +203,39 @@ export class SkillEditor {
           <div class="form-row">
             <div class="form-group">
               <label>아이콘 키</label>
-              <input type="text" id="editSkillIcon" value="${skill.iconKey || ''}" placeholder="예: skill_icon_fireball">
+              ${spriteSelectHtml({ id: 'editSkillIcon', value: skill.iconKey || '', placeholder: '스킬 아이콘 검색...' })}
               <small style="color:var(--text-dim);font-size:10px;">스킬 슬롯에 표시될 아이콘</small>
             </div>
             <div class="form-group">
               <label>이펙트 키</label>
-              <input type="text" id="editSkillEffect2" value="${skill.effectKey || ''}" placeholder="예: fx_fire">
+              ${spriteSelectHtml({ id: 'editSkillEffect2', value: skill.effectKey || '', placeholder: '스킬 이펙트 검색...' })}
               <small style="color:var(--text-dim);font-size:10px;">스킬 사용 시 재생될 이펙트</small>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>기본공격/스킬 스프라이트</label>
+              ${spriteSelectHtml({ id: 'editSkillEffectSprite', value: skill.effectSpriteKey || '', placeholder: '공격 이펙트 스프라이트 검색...' })}
+            </div>
+            <div class="form-group">
+              <label>강공격 스프라이트</label>
+              ${spriteSelectHtml({ id: 'editSkillHeavyEffect', value: skill.heavyEffectKey || '', placeholder: '강공격 이펙트 검색...' })}
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>시전 스프라이트</label>
+              ${spriteSelectHtml({ id: 'editSkillCastSprite', value: skill.castSpriteKey || '', placeholder: '시전 이펙트 검색...' })}
+            </div>
+            <div class="form-group">
+              <label>대상 피격 스프라이트</label>
+              ${spriteSelectHtml({ id: 'editSkillTargetHitEffect', value: targetHitEffectKey, placeholder: '대상이 맞을 때 이펙트 검색...' })}
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>플레이어 피격 스프라이트</label>
+              ${spriteSelectHtml({ id: 'editSkillReceiveHitEffect', value: receiveHitEffectKey, placeholder: '플레이어가 맞을 때 이펙트 검색...' })}
             </div>
           </div>
 
@@ -216,6 +246,11 @@ export class SkillEditor {
           <h4 style="color:var(--gold);font-size:13px;margin:12px 0 6px;">효과 (JSON)</h4>
           <div class="form-group">
             <textarea id="editSkillEffect" style="min-height:80px;font-family:monospace;font-size:12px;">${effectJson}</textarea>
+          </div>
+          <h4 style="color:var(--gold);font-size:13px;margin:12px 0 6px;">이펙트 위치/회전/피격 연출 (JSON)</h4>
+          <div class="form-group">
+            <textarea id="editSkillImpactConfig" style="min-height:160px;font-family:monospace;font-size:12px;" placeholder="기본공격 위치, 회전, 헛공격, 피격 플래시/파티클/흔들림 설정">${impactConfigJson}</textarea>
+            <small style="color:var(--text-dim);font-size:10px;">기본공격은 이 값을 읽어 스페이스바 공격 이펙트와 대상 피격 연출을 재생합니다.</small>
           </div>
         </div>
         <div class="modal-footer">
@@ -228,6 +263,13 @@ export class SkillEditor {
     document.body.appendChild(overlay);
     overlay.querySelectorAll('.modal-close-btn').forEach(b => b.onclick = () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    bindSpriteSelect(overlay, 'editSkillIcon');
+    bindSpriteSelect(overlay, 'editSkillEffect2');
+    bindSpriteSelect(overlay, 'editSkillEffectSprite');
+    bindSpriteSelect(overlay, 'editSkillHeavyEffect');
+    bindSpriteSelect(overlay, 'editSkillCastSprite');
+    bindSpriteSelect(overlay, 'editSkillTargetHitEffect');
+    bindSpriteSelect(overlay, 'editSkillReceiveHitEffect');
 
     // Add scaling
     overlay.querySelector('#addScaleBtn').onclick = () => {
@@ -264,6 +306,25 @@ export class SkillEditor {
         try { effect = JSON.parse(effectText); } catch (e) { window.showToast('효과 JSON 형식 오류', 'error'); return; }
       }
 
+      let impactConfig = null;
+      const impactConfigText = overlay.querySelector('#editSkillImpactConfig').value.trim();
+      if (impactConfigText) {
+        try { impactConfig = JSON.parse(impactConfigText); } catch (e) { window.showToast('이펙트 연출 JSON 형식 오류', 'error'); return; }
+      }
+      const targetHitEffectSprite = overlay.querySelector('#editSkillTargetHitEffect').value.trim();
+      const receiveHitEffectSprite = overlay.querySelector('#editSkillReceiveHitEffect').value.trim();
+      if (targetHitEffectSprite || receiveHitEffectSprite) impactConfig = impactConfig || {};
+      if (targetHitEffectSprite) {
+        impactConfig.targetHitEffect = { ...(impactConfig.targetHitEffect || {}), effectKey: targetHitEffectSprite };
+      } else if (impactConfig?.targetHitEffect) {
+        delete impactConfig.targetHitEffect.effectKey;
+      }
+      if (receiveHitEffectSprite) {
+        impactConfig.receiveHitEffect = { ...(impactConfig.receiveHitEffect || {}), effectKey: receiveHitEffectSprite };
+      } else if (impactConfig?.receiveHitEffect) {
+        delete impactConfig.receiveHitEffect.effectKey;
+      }
+
       const saved = {
         ...skill,
         id,
@@ -284,7 +345,11 @@ export class SkillEditor {
         weaponReq: overlay.querySelector('#editSkillWeaponReq').value.trim() || null,
         iconKey: overlay.querySelector('#editSkillIcon').value.trim() || null,
         effectKey: overlay.querySelector('#editSkillEffect2').value.trim() || null,
+        effectSpriteKey: overlay.querySelector('#editSkillEffectSprite').value.trim() || null,
+        heavyEffectKey: overlay.querySelector('#editSkillHeavyEffect').value.trim() || null,
+        castSpriteKey: overlay.querySelector('#editSkillCastSprite').value.trim() || null,
         effect,
+        impactConfig,
       };
 
       if (!isNew) delete this.dm.data.skills[skillId];
