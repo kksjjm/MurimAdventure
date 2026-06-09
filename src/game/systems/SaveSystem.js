@@ -5,6 +5,7 @@
 const SAVE_KEY = 'murimAdventure_save';
 const AUTOSAVE_KEY = 'murimAdventure_autosave';
 const SAVE_VERSION = 1;
+const TILE_SIZE = 32;
 
 export default class SaveSystem {
   constructor() {
@@ -71,6 +72,8 @@ export default class SaveSystem {
         id: mapId || 'field_01',
         x: Math.round(player.x),
         y: Math.round(player.y),
+        tileX: Math.floor(player.x / TILE_SIZE),
+        tileY: Math.floor(player.y / TILE_SIZE),
       },
     };
   }
@@ -120,6 +123,32 @@ export default class SaveSystem {
    * @returns {object|null} parsed save data, or null if missing / invalid
    */
   load(key = SAVE_KEY) {
+    return this._readSave(key, true);
+  }
+
+  /**
+   * Load the newest valid save across manual save and auto-save.
+   * This keeps in-game load behavior unified even if the latest snapshot came
+   * from the auto-save timer.
+   * @returns {object|null}
+   */
+  loadLatest() {
+    const saves = [
+      this._readSave(SAVE_KEY, false),
+      this._readSave(AUTOSAVE_KEY, false),
+    ].filter(Boolean);
+
+    if (!saves.length) return null;
+
+    const newest = saves.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))[0];
+    if (typeof newest.playTime === 'number') {
+      this.playTimeSeconds = newest.playTime;
+      this._sessionStart = Date.now();
+    }
+    return newest;
+  }
+
+  _readSave(key, restorePlayTime) {
     try {
       const raw = localStorage.getItem(key);
       if (!raw) return null;
@@ -131,7 +160,7 @@ export default class SaveSystem {
       }
 
       // Restore accumulated play time for the session counter
-      if (typeof data.playTime === 'number') {
+      if (restorePlayTime && typeof data.playTime === 'number') {
         this.playTimeSeconds = data.playTime;
         this._sessionStart = Date.now();
       }

@@ -60,7 +60,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.setCollideWorldBounds(true);
     this.setDepth(10);
     this.body.setSize(32, 32);
-    this.body.setOffset(0, 16);
+    this.body.setOffset(0, 32);
 
     // Play initial idle animation if available
     if (scene.anims.exists('player_idle_down')) {
@@ -451,9 +451,9 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       const impactDelay = Math.max(0, Math.min(140, Math.floor((attackAction?.startup_ms || 120) * 0.5)));
       this.scene.time.delayedCall(impactDelay, () => {
         const result = this.scene.combatSystem.performAttack(this, target, attackSkill);
+        target.provoke();
         if (result && result.hit && this.scene.impactSystem) {
           this.scene.impactSystem.playBasicAttack(this, target, weapon, attackSkill);
-          target.provoke();
         }
         this.scene.events.emit('player-stats-changed');
       });
@@ -535,6 +535,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     const result = this.scene.combatSystem.performAttack(this, target, attackSkill);
+    if (target?.provoke) target.provoke();
 
     if (result && result.hit && this.scene.impactSystem) {
       this.scene.impactSystem.playBasicAttack(this, target, weapon, attackSkill);
@@ -584,6 +585,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     if (skill.baseDamage > 0 && target) {
       this._updateProficiencyBonus();
       const result = this.scene.combatSystem.performAttack(this, target, skill);
+      if (target?.provoke) target.provoke();
 
       // Skill impact effect
       if (result && result.hit && this.scene.impactSystem) {

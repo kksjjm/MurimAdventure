@@ -742,7 +742,7 @@ export default class UIScene extends Phaser.Scene {
   }
 
   _doLoadLast() {
-    const data = this.saveSystem.load();
+    const data = this.saveSystem.loadLatest();
     if (!data) {
       this._showNotification('저장 데이터가 없습니다', '#ff7777');
       return;
@@ -752,6 +752,10 @@ export default class UIScene extends Phaser.Scene {
 
   _applyLoadData(data) {
     const ws = this.worldScene;
+    if (ws?.restoreFromSaveData?.(data)) {
+      this._showNotification('불러오기 완료', '#44ff88');
+      return;
+    }
     if (!ws?.player || !data?.player) return;
     Object.assign(ws.player.stats, data.player.stats || {});
     ws.player.equipment = { ...ws.player.equipment, ...(data.player.equipment || {}) };

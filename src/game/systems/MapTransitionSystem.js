@@ -4,8 +4,6 @@
 
 import { getGameData, normalizeMapId } from '../../data/GameDataLoader.js';
 
-const FADE_DURATION = 500; // ms
-
 export default class MapTransitionSystem {
   /**
    * Transition from one map scene to another.
@@ -26,6 +24,7 @@ export default class MapTransitionSystem {
       console.warn(`[MapTransition] No admin-managed map data for: ${targetMapId}`);
       currentScene._transitioning = false;
       currentScene._mapTransitionInProgress = false;
+      currentScene._portalCooldownUntil = (currentScene.time?.now || 0) + 1000;
       return;
     }
 
@@ -62,24 +61,10 @@ export default class MapTransitionSystem {
         : null;
     }
 
-    // Fade out
-    currentScene.cameras.main.fadeOut(FADE_DURATION, 0, 0, 0);
-
-    let didStartTargetScene = false;
-    const startTargetScene = () => {
-      if (didStartTargetScene) return;
-      didStartTargetScene = true;
-      if (!currentScene.scene || !currentScene.scene.isActive('WorldScene')) return;
-      // Stop UI scene if running
-      if (currentScene.scene.isActive('UIScene')) {
-        currentScene.scene.stop('UIScene');
-      }
-
-      currentScene.scene.start('WorldScene', carryData);
-    };
-
-    currentScene.cameras.main.once('camerafadeoutcomplete', startTargetScene);
-    currentScene.time.delayedCall(FADE_DURATION + 250, startTargetScene);
+    currentScene.cameras.main.resetFX();
+    if (currentScene.changeMap) {
+      currentScene.changeMap(normalizedTargetMapId, targetX, targetY);
+    }
   }
 
   /**
@@ -90,8 +75,7 @@ export default class MapTransitionSystem {
   static showMapName(scene, mapNameKo) {
     const cam = scene.cameras.main;
 
-    // Fade in
-    cam.fadeIn(FADE_DURATION, 0, 0, 0);
+    cam.resetFX();
 
     // Map name banner
     const text = scene.add.text(cam.width / 2, cam.height / 2 - 40, mapNameKo, {

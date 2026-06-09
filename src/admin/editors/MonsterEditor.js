@@ -13,6 +13,13 @@ export class MonsterEditor {
   }
 
   getMonsters() { return this.dm.data.monsters || {}; }
+  getAIOptions() {
+    return [AI_BEHAVIOR.PASSIVE, AI_BEHAVIOR.AGGRESSIVE];
+  }
+
+  getMonsterAI(monster) {
+    return monster?.aiBehavior || monster?.ai || 'PASSIVE';
+  }
 
   render(container) {
     const monsters = this.getMonsters();
@@ -20,11 +27,11 @@ export class MonsterEditor {
 
     let filtered = monsterList.filter(m => {
       if (this.searchTerm && !m.name?.includes(this.searchTerm) && !m.id?.includes(this.searchTerm)) return false;
-      if (this.filterAI && m.ai !== this.filterAI) return false;
+      if (this.filterAI && this.getMonsterAI(m) !== this.filterAI) return false;
       return true;
     }).sort((a, b) => (a.level || 0) - (b.level || 0));
 
-    const aiOptions = Object.values(AI_BEHAVIOR).map(a =>
+    const aiOptions = this.getAIOptions().map(a =>
       `<option value="${a.key}" ${this.filterAI === a.key ? 'selected' : ''}>${a.nameKo}</option>`
     ).join('');
 
@@ -51,7 +58,8 @@ export class MonsterEditor {
             </tr></thead>
             <tbody>
               ${filtered.map(m => {
-                const aiDef = AI_BEHAVIOR[m.ai] || {};
+                const aiValue = this.getMonsterAI(m);
+                const aiDef = AI_BEHAVIOR[aiValue] || {};
                 const lvColor = m.level <= 3 ? '#27ae60' : m.level <= 10 ? '#e67e22' : '#e74c3c';
                 return `<tr>
                   <td style="font-size:11px;color:var(--text-dim);">${m.id}</td>
@@ -60,7 +68,7 @@ export class MonsterEditor {
                   <td>${m.stats?.HP || m.stats?.maxHP || '-'}</td>
                   <td>${m.stats?.ATK || '-'}</td>
                   <td>${m.stats?.DEF || '-'}</td>
-                  <td><span class="badge badge-blue">${aiDef.nameKo || m.ai || '-'}</span></td>
+                  <td><span class="badge badge-blue">${aiDef.nameKo || aiValue || '-'}</span></td>
                   <td>${m.exp || '-'}</td>
                   <td>${typeof m.gold === 'object' ? `${m.gold.min}-${m.gold.max}` : m.gold || '-'}</td>
                   <td>
@@ -99,7 +107,7 @@ export class MonsterEditor {
     const mon = isNew ? {
       id: '', name: '', level: 1,
       stats: { HP: 50, maxHP: 50, ATK: 10, DEF: 5, SPD: 80, ACCURACY: 85, EVASION: 5, CRIT_RATE: 5, CRIT_DMG: 130 },
-      ai: 'PASSIVE', chaseRange: 100, attackRange: 30, attackSpeed: 1000,
+      ai: 'PASSIVE', aiBehavior: 'PASSIVE', chaseRange: 100, attackRange: 30, attackSpeed: 1000,
       exp: 20, gold: { min: 5, max: 15 },
       drops: [], spriteKey: '', tint: 0xffffff
     } : JSON.parse(JSON.stringify(this.dm.data.monsters[monsterId] || {}));
@@ -109,8 +117,9 @@ export class MonsterEditor {
     if (!mon.drops) mon.drops = [];
     if (typeof mon.gold !== 'object') mon.gold = { min: mon.gold || 0, max: mon.gold || 0 };
 
-    const aiOptions = Object.values(AI_BEHAVIOR).map(a =>
-      `<option value="${a.key}" ${mon.ai === a.key ? 'selected' : ''}>${a.nameKo} - ${a.description}</option>`
+    const selectedAI = this.getMonsterAI(mon);
+    const aiOptions = this.getAIOptions().map(a =>
+      `<option value="${a.key}" ${selectedAI === a.key ? 'selected' : ''}>${a.nameKo}${a.description ? ` - ${a.description}` : ''}</option>`
     ).join('');
 
     const monsterStats = ['HP', 'maxHP', 'ATK', 'DEF', 'SPD', 'ACCURACY', 'EVASION', 'CRIT_RATE', 'CRIT_DMG'];
@@ -234,6 +243,7 @@ export class MonsterEditor {
         level: parseInt(overlay.querySelector('#editMonLevel').value) || 1,
         stats,
         ai: overlay.querySelector('#editMonAI').value,
+        aiBehavior: overlay.querySelector('#editMonAI').value,
         chaseRange: parseInt(overlay.querySelector('#editMonChase').value) || 100,
         attackRange: parseInt(overlay.querySelector('#editMonAtkRange').value) || 30,
         attackSpeed: parseInt(overlay.querySelector('#editMonAtkSpd').value) || 1000,

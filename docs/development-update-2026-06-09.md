@@ -84,6 +84,42 @@ This update restructures the project around admin-managed ARPG data, editable sp
 - Fixed HUD overflow caused by compressed bottom UI height.
 - Kept build compatibility after removing old scene files and centralizing map loading in `WorldScene`.
 
+## Follow-Up Stabilization Update
+
+Additional in-game and admin fixes were completed after the managed ARPG refactor:
+
+### Portal And Map Transition Runtime
+
+- Reworked portal transitions so `WorldScene` changes the active map in-place instead of restarting or switching scenes.
+- Added runtime cleanup and recreation for map layers, monsters, NPCs, item pickups, portals, minimap, camera bounds, physics colliders, and respawn timers.
+- Added safe spawn resolution so blocked or invalid portal arrival tiles move the player to the nearest walkable tile.
+- Added arrival portal blocking/cooldown behavior to prevent instant bounce-back after a map transition.
+- Restored keyboard input state after map changes so movement, Space attack, and other controls remain active.
+
+### Unified Save And Load Behavior
+
+- Save data now records the current map ID, world position, and tile position.
+- In-game load now chooses the newest valid save snapshot across manual save and auto-save.
+- Loading a save now restores the saved map runtime first, then restores player stats, equipment, inventory, skills, proficiency, and exact position.
+- Added fallback placement if a saved position is no longer walkable because map data changed.
+
+### Monster AI, Navigation, And Collision
+
+- Added `NavigationSystem` for tile-aware pathfinding over map collision data.
+- Added support for two monster behavior modes:
+  - Passive monsters do not attack until provoked by the player.
+  - Aggressive monsters chase and attack when the player enters detection range.
+- Updated `MonsterEditor` so admins can select passive or aggressive AI behavior.
+- Prevented player and monster physics from pushing each other through movement.
+- Moved player, monster, and NPC collision boxes to the lower half of their `32x64` visuals so collision matches the feet/body area.
+
+### Sprite Editor Follow-Up
+
+- Fixed the sprite reset flow so custom sprite data and linked data references are cleared consistently.
+- Added a `전부지우기` button next to `초기화`; it clears the current sprite canvas while preserving undo support until the user saves.
+- Updated the character guide overlay so it follows the admin-selected main character sprite.
+- Ensured weapon, armor, and other equipment sprite editing always shows the character guide overlay.
+
 ## Removed Or Replaced Files
 
 - Removed old scene-specific map files:
@@ -101,6 +137,9 @@ Latest verification commands run successfully:
 ```bash
 node --check src/game/scenes/UIScene.js
 node --check src/game/entities/Monster.js
+node --check src/game/systems/SaveSystem.js
+node --check src/game/scenes/WorldScene.js
+node --check src/admin/editors/SpriteEditor.js
 npm run build
 ```
 
@@ -108,6 +147,7 @@ Build result:
 
 - Vite production build completed successfully.
 - Existing chunk size warning remains because the Phaser/game bundle is larger than Vite's default `500 kB` warning threshold. This is a warning, not a runtime failure.
+- `http://localhost:3000/admin.html` returned HTTP 200 during local verification.
 
 ## Current Notes
 

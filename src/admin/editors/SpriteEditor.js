@@ -942,6 +942,7 @@ export class SpriteEditor {
       <button class="btn btn-secondary btn-small" id="sprDownload">PNG 다운로드</button>
       <button class="btn btn-success btn-small" id="sprSave">저장</button>
       <button class="btn btn-danger btn-small" id="sprReset">초기화</button>
+      <button class="btn btn-danger btn-small" id="sprClearAll">전부지우기</button>
       <button class="btn btn-secondary btn-small" id="sprMirrorH">좌우 반전</button>
       <button class="btn btn-secondary btn-small" id="sprMirrorV">상하 반전</button>
     `;
@@ -976,6 +977,7 @@ export class SpriteEditor {
     document.getElementById('sprDownload')?.addEventListener('click', () => this._downloadPNG());
     document.getElementById('sprSave')?.addEventListener('click', () => this._saveSprite());
     document.getElementById('sprReset')?.addEventListener('click', () => this._resetSprite());
+    document.getElementById('sprClearAll')?.addEventListener('click', () => this._clearSpriteContents());
     document.getElementById('sprMirrorH')?.addEventListener('click', () => this._mirror('h'));
     document.getElementById('sprMirrorV')?.addEventListener('click', () => this._mirror('v'));
 
@@ -1165,6 +1167,12 @@ export class SpriteEditor {
   // =========================================================================
 
   _isEquipmentSprite() {
+    if (this.selectedSprite) {
+      if (this._parseEquipAnimKey(this.selectedSprite.key)) return true;
+      if (this.selectedSprite.baseSpriteKey && this.selectedSprite.itemId && !this.selectedSprite.characterSpriteRole) return true;
+      const item = this.selectedSprite.itemId ? this.dm?.data?.items?.[this.selectedSprite.itemId] : null;
+      if (item?.slot) return true;
+    }
     return this.selectedSprite && (
       this.selectedSprite.category === '장비'
       || this.selectedSprite.browserCategory === '장비'
@@ -1177,6 +1185,15 @@ export class SpriteEditor {
    * Base sprites have keys like equip_weapon_sword but NOT equip_weapon_sword_idle_down.
    */
   _isEquipmentBaseSprite() {
+    if (this._isEquipmentSprite()) {
+      const key = this.selectedSprite.key;
+      for (const set of EQUIP_ANIM_SETS) {
+        for (const dir of set.dirs) {
+          if (key.endsWith(`_${set.type}_${dir}`)) return false;
+        }
+      }
+      return true;
+    }
     if (!this.selectedSprite || (this.selectedSprite.category !== '장비' && this.selectedSprite.browserCategory !== '장비')) return false;
     const key = this.selectedSprite.key;
     // Base equipment sprites don't end with _{animType}_{dir}
@@ -1387,6 +1404,16 @@ export class SpriteEditor {
   _loadCharGuideForAnim(animType, dir) {
     this._charGuideAnimType = animType;
     this._charGuideAnimDir = dir;
+    this._loadMainCharacterGuideImage(animType, dir);
+  }
+
+  _loadCharGuide() {
+    this._charGuideAnimType = null;
+    this._charGuideAnimDir = null;
+    this._loadMainCharacterGuideImage(null, 'down');
+  }
+
+  _setBoxCharacterGuide(dir = 'down') {
     this._charGuideImage = this._createBoxCharacterGuideCanvas(DEFAULT_ACTOR_WIDTH, DEFAULT_ACTOR_HEIGHT, dir);
     this._charGuideIsAnimSheet = false;
     this._charGuideFrameWidth = DEFAULT_ACTOR_WIDTH;
@@ -1395,17 +1422,41 @@ export class SpriteEditor {
     this._redrawDisplay();
   }
 
-  _loadCharGuide() {
-    // Current game character is a generated 32x64 box sprite, so the editor guide
-    // is drawn locally instead of loading old character spritesheets.
-    this._charGuideImage = this._createBoxCharacterGuideCanvas(DEFAULT_ACTOR_WIDTH, DEFAULT_ACTOR_HEIGHT, 'down');
-    this._charGuideIsAnimSheet = false;
-    this._charGuideAnimType = null;
-    this._charGuideAnimDir = null;
-    this._charGuideFrameWidth = DEFAULT_ACTOR_WIDTH;
-    this._charGuideFrameHeight = DEFAULT_ACTOR_HEIGHT;
-    this._charGuideFrames = 1;
-    this._redrawDisplay();
+  _loadMainCharacterGuideImage(animType = null, dir = 'down') {
+    const customs = this._getCustomSprites();
+    const mainKey = this.dm?.data?.mainCharacter?.spriteKey || 'player_base';
+    const candidates = [];
+    if (animType && dir) {
+      candidates.push(`${mainKey}_${animType}_${dir}`);
+      candidates.push(`player_${animType}_${dir}`);
+    }
+    candidates.push(mainKey, 'player_base');
+
+    const guideKey = candidates.find(key => customs[key]?.dataUrl);
+    if (!guideKey) {
+      this._setBoxCharacterGuide(dir);
+      return;
+    }
+
+    const meta = customs[guideKey];
+    const frameWidth = meta.frameWidth || DEFAULT_ACTOR_WIDTH;
+    const frameHeight = meta.frameHeight || DEFAULT_ACTOR_HEIGHT;
+    const guideToken = `${guideKey}:${Date.now()}:${Math.random()}`;
+    this._charGuideLoadToken = guideToken;
+
+    const img = new Image();
+    img.onload = () => {
+      if (this._charGuideLoadToken !== guideToken) return;
+      const frames = Math.max(1, Math.floor(img.width / Math.max(1, frameWidth)));
+      this._charGuideImage = img;
+      this._charGuideIsAnimSheet = frames > 1;
+      this._charGuideFrameWidth = frameWidth;
+      this._charGuideFrameHeight = frameHeight;
+      this._charGuideFrames = frames;
+      this._redrawDisplay();
+    };
+    img.onerror = () => this._setBoxCharacterGuide(dir);
+    img.src = meta.dataUrl;
   }
 
   _createBoxCharacterGuideCanvas(width = DEFAULT_ACTOR_WIDTH, height = DEFAULT_ACTOR_HEIGHT, dir = 'down') {
@@ -2419,6 +2470,7 @@ export class SpriteEditor {
         if (!this.dm.data.mainCharacter) this.dm.data.mainCharacter = {};
         this.dm.data.mainCharacter.spriteKey = spr.key;
         this.dm.save();
+        this._loadCharGuide();
       }
       if (window.showToast) window.showToast(`${spr.name} 스프라이트가 저장되었습니다.`, 'success');
       if (spr.skillId && this.dm?.data?.skills?.[spr.skillId]) {
@@ -2452,6 +2504,30 @@ export class SpriteEditor {
     if (!this.selectedSprite) return;
     const spr = this.selectedSprite;
     const customs = this._getCustomSprites();
+    let resetChanged = false;
+    for (const key of this._getSpriteResetKeys(spr)) {
+      if (customs[key]) {
+        delete customs[key];
+        resetChanged = true;
+      }
+    }
+    if (this._resetSpriteDataLinks(spr)) {
+      resetChanged = true;
+    }
+    if (spr.characterSpriteRole === 'base' && this.dm?.data?.mainCharacter?.spriteKey === 'player_base') {
+      this.selectedSprite = this._getSpriteInfo('player_base', {
+        name: 'Main Character / Base',
+        characterSpriteRole: 'base',
+        frameWidth: 64,
+        frameHeight: 64,
+        frames: 1,
+        type: 'static',
+      });
+    }
+    if (resetChanged) {
+      localStorage.setItem(CUSTOM_SPRITES_KEY, JSON.stringify(customs));
+      if (window.showToast) window.showToast(`${spr.name} sprite reset.`, 'info');
+    }
     if (customs[spr.key]) {
       delete customs[spr.key];
       localStorage.setItem(CUSTOM_SPRITES_KEY, JSON.stringify(customs));
@@ -2460,6 +2536,84 @@ export class SpriteEditor {
     this._loadSprite();
     this._renderBrowser();
     this._renderTools();
+  }
+
+  _clearSpriteContents() {
+    if (!this.selectedSprite || !this.nativeCanvas || !this.nativeCtx) return;
+    this._pushUndo();
+    this.nativeCtx.clearRect(0, 0, this.nativeCanvas.width, this.nativeCanvas.height);
+    this.currentFrame = 0;
+    this._redrawDisplay();
+    this._renderTools();
+    this._syncFrameControls();
+    if (window.showToast) window.showToast(`${this.selectedSprite.name} 스프라이트를 모두 지웠습니다. 저장을 눌러 적용하세요.`, 'info');
+  }
+
+  _getSpriteResetKeys(spr) {
+    const keys = new Set([spr.key]);
+    if (spr.baseSpriteKey) keys.add(spr.baseSpriteKey);
+    if (this._isEquipmentBaseSprite()) {
+      for (const set of EQUIP_ANIM_SETS) {
+        for (const dir of set.dirs) {
+          keys.add(`${spr.key}_${set.type}_${dir}`);
+        }
+      }
+    }
+    return keys;
+  }
+
+  _resetSpriteDataLinks(spr) {
+    let changed = false;
+
+    if (spr.characterSpriteRole === 'base' && this.dm?.data?.mainCharacter?.spriteKey === spr.key) {
+      this.dm.data.mainCharacter.spriteKey = 'player_base';
+      changed = true;
+    }
+
+    const item = spr.itemId ? this.dm?.data?.items?.[spr.itemId] : null;
+    if (item) {
+      if (item.spriteKey === spr.key || item.spriteKey === spr.baseSpriteKey) {
+        delete item.spriteKey;
+        changed = true;
+      }
+      if (spr.spriteRole === 'itemIcon' && item.iconKey === spr.key) {
+        delete item.iconKey;
+        changed = true;
+      }
+    }
+
+    const skill = spr.skillId ? this.dm?.data?.skills?.[spr.skillId] : null;
+    if (skill) {
+      if (spr.spriteRole === 'skillIcon' && skill.iconKey === spr.key) {
+        delete skill.iconKey;
+        changed = true;
+      }
+      if (spr.spriteRole === 'skillEffect') {
+        if (skill.effectKey === spr.key) {
+          delete skill.effectKey;
+          changed = true;
+        }
+        if (skill.effectSpriteKey === spr.key) {
+          delete skill.effectSpriteKey;
+          changed = true;
+        }
+      }
+      if (spr.spriteRole === 'skillCast' && skill.castSpriteKey === spr.key) {
+        delete skill.castSpriteKey;
+        changed = true;
+      }
+      if (spr.spriteRole === 'skillTargetHitEffect' && skill.impactConfig?.targetHitEffect?.effectKey === spr.key) {
+        delete skill.impactConfig.targetHitEffect.effectKey;
+        changed = true;
+      }
+      if (spr.spriteRole === 'skillReceiveHitEffect' && skill.impactConfig?.receiveHitEffect?.effectKey === spr.key) {
+        delete skill.impactConfig.receiveHitEffect.effectKey;
+        changed = true;
+      }
+    }
+
+    if (changed) this.dm.save();
+    return changed;
   }
 
   _uploadPNG() {

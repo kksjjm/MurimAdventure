@@ -56,15 +56,17 @@ export default class Monster extends Phaser.Physics.Arcade.Sprite {
 
     this.setDepth(9);
     this.body.setSize(32, 32);
-    this.body.setOffset(0, 16);
+    this.body.setOffset(0, 32);
     this._usingNewSprites = scene.textures.exists(idleTextureKey);
 
     // Prevent monsters from being pushed out of bounds
     this.setCollideWorldBounds(true);
 
-    // Give monsters some mass so they don't slide when pushed
-    this.body.setImmovable(false);
-    this.body.setBounce(0.1);
+    // Treat monsters as solid blockers. They can move by AI velocity, but player
+    // collision cannot shove them around like loose physics props.
+    this.body.setImmovable(true);
+    this.body.setBounce(0);
+    this.body.pushable = false;
 
     // Copy monster data
     this.monsterData = monsterData;
@@ -77,7 +79,7 @@ export default class Monster extends Phaser.Physics.Arcade.Sprite {
     this.stats = stats;
 
     // AI config
-    this.aiType = monsterData.aiBehavior || monsterData.ai || 'PASSIVE';
+    this.aiType = this._normalizeAIType(monsterData.aiBehavior || monsterData.ai || 'PASSIVE');
     this.chaseRange = monsterData.chaseRange || 150;
     this.attackRange = monsterData.attackRange || 40;
     this.attackSpeed = monsterData.attackSpeed || 1200;
@@ -97,6 +99,8 @@ export default class Monster extends Phaser.Physics.Arcade.Sprite {
     this.spawnX = x;
     this.spawnY = y;
     this.isDead = false;
+    this.pathTarget = null;
+    this.nextPathAt = 0;
 
     if (monsterData.tint) {
       this.setTint(monsterData.tint);
@@ -266,9 +270,13 @@ export default class Monster extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    // 4-directional chase
-    const dx = player.x - this.x;
-    const dy = player.y - this.y;
+    const navTarget = this._getNavigationTarget(player, time);
+    const targetX = navTarget?.x ?? player.x;
+    const targetY = navTarget?.y ?? player.y;
+
+    // 4-directional chase, using tile-aware navigation when available.
+    const dx = targetX - this.x;
+    const dy = targetY - this.y;
 
     if (Math.abs(dx) > Math.abs(dy)) {
       this.setVelocity(dx > 0 ? this.moveSpeed : -this.moveSpeed, 0);
@@ -327,8 +335,6 @@ export default class Monster extends Phaser.Physics.Arcade.Sprite {
 
   _shouldChase(dist) {
     if (this.aiType === 'AGGRESSIVE' && dist < this.chaseRange) return true;
-    if (this.aiType === 'TERRITORIAL' && dist < this.chaseRange * 0.6) return true;
-    if (this.aiType === 'PATROL' && dist < this.chaseRange * 0.8) return true;
     return false;
   }
 
@@ -336,6 +342,21 @@ export default class Monster extends Phaser.Physics.Arcade.Sprite {
     if (this.aiType === 'PASSIVE' && this.aiState !== 'chase' && this.aiState !== 'attack') {
       this.aiState = 'chase';
     }
+  }
+
+  _getNavigationTarget(player, time) {
+    if (!this.scene?.navigationSystem) return null;
+    if (!this.pathTarget || time >= this.nextPathAt) {
+      this.pathTarget = this.scene.navigationSystem.getNextWorldStep(this.x, this.y, player.x, player.y);
+      this.nextPathAt = time + 300;
+    }
+    return this.pathTarget;
+  }
+
+  _normalizeAIType(value) {
+    const normalized = String(value || 'PASSIVE').trim().toUpperCase();
+    if (normalized === 'AGGRESSIVE' || normalized === 'AGGRO') return 'AGGRESSIVE';
+    return 'PASSIVE';
   }
 
   // ==========================================================================

@@ -10,6 +10,7 @@ import ProficiencySystem from '../systems/ProficiencySystem.js';
 import SkillCombinationSystem from '../systems/SkillCombinationSystem.js';
 import ImpactSystem from '../systems/ImpactSystem.js';
 import MapTransitionSystem from '../systems/MapTransitionSystem.js';
+import NavigationSystem from '../systems/NavigationSystem.js';
 import { getGameData, normalizeMapId } from '../../data/GameDataLoader.js';
 import { spawnItemPickup, onItemPickup } from '../systems/ItemPickupSystem.js';
 import { BOTTOM_UI_HEIGHT } from './UIScene.js';
@@ -35,6 +36,7 @@ export default class WorldScene extends Phaser.Scene {
     this._transitioning = false;
     this._mapTransitionInProgress = false;
     this._portalCooldownUntil = this.time.now + (Number(this.initData.portalCooldownMs) || 0);
+    this._blockArrivalPortalUntilExit = Boolean(this.initData.fromMap);
     // --- Systems ---
     this.combatSystem = new CombatSystem(this);
     this.proficiencySystem = new ProficiencySystem(this);
@@ -47,14 +49,19 @@ export default class WorldScene extends Phaser.Scene {
     this.mapHeight = Math.max(1, Number(this.currentMap.height) || MAP_H);
     this.mapData = this._generateMap();
     this._renderMap();
+    this.navigationSystem = new NavigationSystem(this, this.collisionData, TILE_SIZE);
 
     // --- World bounds ---
+    this.physics.world.resume();
     this.physics.world.setBounds(0, 0, this.mapWidth * TILE_SIZE, this.mapHeight * TILE_SIZE);
 
     // --- Player ---
     const defaultSpawn = this.currentMap.spawnPoints?.player || this.currentMap.spawns?.player || { x: 25, y: 25 };
-    const spTileX = Phaser.Math.Clamp(Number(this.initData.spawnX ?? defaultSpawn.x) || 1, 0, this.mapWidth - 1);
-    const spTileY = Phaser.Math.Clamp(Number(this.initData.spawnY ?? defaultSpawn.y) || 1, 0, this.mapHeight - 1);
+    const requestedSpawnX = Number(this.initData.spawnX ?? defaultSpawn.x) || 1;
+    const requestedSpawnY = Number(this.initData.spawnY ?? defaultSpawn.y) || 1;
+    const spawnTile = this._resolveSafeSpawnTile(requestedSpawnX, requestedSpawnY);
+    const spTileX = spawnTile.x;
+    const spTileY = spawnTile.y;
     const spawnX = spTileX * TILE_SIZE + TILE_SIZE / 2;
     const spawnY = spTileY * TILE_SIZE + TILE_SIZE / 2;
     this.player = new Player(this, spawnX, spawnY);
@@ -86,18 +93,7 @@ export default class WorldScene extends Phaser.Scene {
     this._spawnNPCs();
 
     // --- Collisions ---
-    this.physics.add.collider(this.player, this.wallLayer);
-    this.physics.add.collider(this.monsters, this.wallLayer);
-    // Player <-> Monster collision (they cannot pass through each other)
-    this.physics.add.collider(this.player, this.monsters);
-    // Monster <-> Monster collision
-    this.physics.add.collider(this.monsters, this.monsters);
-    if (this.npcGroup) {
-      this.physics.add.collider(this.player, this.npcGroup);
-    }
-
-    // Item pickup overlap
-    this.physics.add.overlap(this.player, this.itemPickups, this._onItemPickup, null, this);
+    this._setupCollisions();
 
     // --- Camera ---
     const cameraWidth = this.scale.width || this.cameras.main.width;
@@ -106,8 +102,11 @@ export default class WorldScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, this.mapWidth * TILE_SIZE, this.mapHeight * TILE_SIZE);
     this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
     this.cameras.main.snapToFloor = true;
+    this.cameras.main.resetFX();
+    this.input.enabled = true;
 
     // --- Input ---
+    this._restoreInputState();
     this.cursors = this.input.keyboard.createCursorKeys();
     this.wasd = {
       up: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
@@ -128,6 +127,8 @@ export default class WorldScene extends Phaser.Scene {
       this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.FIVE),
     ];
     this.interactKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F);
+    this.input.keyboard.resetKeys();
+    this._bindReliableKeyboardInput();
 
     // Click to interact
     this.input.on('pointerdown', this._onPointerDown, this);
@@ -139,6 +140,9 @@ export default class WorldScene extends Phaser.Scene {
     const portals = this._getMapPortals();
     if (portals.length) {
       this._createPortals(portals);
+    }
+    if (this.initData.fromMap) {
+      this._nudgePlayerAwayFromArrivalPortal();
     }
 
     // --- Minimap ---
@@ -154,7 +158,7 @@ export default class WorldScene extends Phaser.Scene {
 
     // --- Respawn timer ---
     if (this._getMonsterSpawns().length > 0) {
-      this.time.addEvent({
+      this._respawnTimer = this.time.addEvent({
         delay: getGameData().spawnConfig.default.respawnTime || 15000,
         callback: this._respawnMonsters,
         callbackScope: this,
@@ -230,6 +234,35 @@ export default class WorldScene extends Phaser.Scene {
     return rows;
   }
 
+  _resolveSafeSpawnTile(tileX, tileY) {
+    const startX = Phaser.Math.Clamp(Math.floor(Number(tileX) || 1), 0, this.mapWidth - 1);
+    const startY = Phaser.Math.Clamp(Math.floor(Number(tileY) || 1), 0, this.mapHeight - 1);
+    if (this._isWalkableTile(startX, startY)) {
+      return { x: startX, y: startY };
+    }
+
+    const maxRadius = Math.max(this.mapWidth, this.mapHeight);
+    for (let radius = 1; radius <= maxRadius; radius++) {
+      for (let y = startY - radius; y <= startY + radius; y++) {
+        for (let x = startX - radius; x <= startX + radius; x++) {
+          const isEdge = x === startX - radius || x === startX + radius || y === startY - radius || y === startY + radius;
+          if (isEdge && this._isWalkableTile(x, y)) {
+            console.warn(`[WorldScene] Spawn tile ${startX},${startY} is blocked. Using nearest safe tile ${x},${y}.`);
+            return { x, y };
+          }
+        }
+      }
+    }
+
+    console.warn(`[WorldScene] No safe spawn tile found near ${startX},${startY}. Falling back to original tile.`);
+    return { x: startX, y: startY };
+  }
+
+  _isWalkableTile(x, y) {
+    if (x < 0 || y < 0 || x >= this.mapWidth || y >= this.mapHeight) return false;
+    return !this.collisionData?.[y]?.[x];
+  }
+
   _generateMap() {
     if (this.currentMap?.layers?.ground?.length) {
       return this._buildMapFromEditorLayers(this.currentMap);
@@ -242,6 +275,233 @@ export default class WorldScene extends Phaser.Scene {
 
     this.collisionData = Array.from({ length: this.mapHeight }, () => new Array(this.mapWidth).fill(false));
     return Array.from({ length: this.mapHeight }, () => new Array(this.mapWidth).fill(0));
+  }
+
+  _restoreInputState() {
+    this.input.enabled = true;
+    if (!this.input.keyboard) return;
+    this.input.keyboard.enabled = true;
+    if (this.input.keyboard.manager) {
+      this.input.keyboard.manager.enabled = true;
+    }
+    const canvas = this.game?.canvas;
+    if (canvas) {
+      canvas.tabIndex = 0;
+      canvas.focus?.();
+    }
+  }
+
+  _bindReliableKeyboardInput() {
+    this._keysDown = new Set();
+    this._onReliableKeyDown = (event) => {
+      this._keysDown.add(event.code);
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) {
+        event.preventDefault();
+      }
+    };
+    this._onReliableKeyUp = (event) => {
+      this._keysDown.delete(event.code);
+    };
+
+    window.addEventListener('keydown', this._onReliableKeyDown);
+    window.addEventListener('keyup', this._onReliableKeyUp);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener('keydown', this._onReliableKeyDown);
+      window.removeEventListener('keyup', this._onReliableKeyUp);
+      this._keysDown.clear();
+    });
+  }
+
+  _getMovementInput() {
+    const pressed = this._keysDown || new Set();
+    const keyIsDown = (code, fallbackKey) => pressed.has(code) || Boolean(fallbackKey?.isDown);
+    return {
+      left: { isDown: keyIsDown('ArrowLeft', this.cursors?.left) || keyIsDown('KeyA', this.wasd?.left) },
+      right: { isDown: keyIsDown('ArrowRight', this.cursors?.right) || keyIsDown('KeyD', this.wasd?.right) },
+      up: { isDown: keyIsDown('ArrowUp', this.cursors?.up) || keyIsDown('KeyW', this.wasd?.up) },
+      down: { isDown: keyIsDown('ArrowDown', this.cursors?.down) || keyIsDown('KeyS', this.wasd?.down) },
+    };
+  }
+
+  _setupCollisions() {
+    this._mapColliders = this._mapColliders || [];
+    this._mapColliders.push(this.physics.add.collider(this.player, this.wallLayer));
+    this._mapColliders.push(this.physics.add.collider(this.monsters, this.wallLayer));
+    this._mapColliders.push(this.physics.add.collider(this.player, this.monsters, this._onPlayerMonsterCollide, null, this));
+    this._mapColliders.push(this.physics.add.collider(this.monsters, this.monsters));
+    if (this.npcGroup) {
+      this._mapColliders.push(this.physics.add.collider(this.player, this.npcGroup));
+    }
+    this._mapColliders.push(this.physics.add.overlap(this.player, this.itemPickups, this._onItemPickup, null, this));
+  }
+
+  changeMap(targetMapId, targetX, targetY) {
+    const nextMapId = normalizeMapId(targetMapId);
+    const previousMapId = this.mapId;
+
+    this._transitioning = true;
+    this._mapTransitionInProgress = true;
+    this._destroyCurrentMapRuntime();
+
+    this.mapId = nextMapId;
+    this.currentMap = this._resolveMapData(this.mapId);
+    this.mapWidth = Math.max(1, Number(this.currentMap.width) || MAP_W);
+    this.mapHeight = Math.max(1, Number(this.currentMap.height) || MAP_H);
+    this.mapData = this._generateMap();
+    this._renderMap();
+    this.navigationSystem = new NavigationSystem(this, this.collisionData, TILE_SIZE);
+    this.physics.world.resume();
+    this.physics.world.setBounds(0, 0, this.mapWidth * TILE_SIZE, this.mapHeight * TILE_SIZE);
+
+    const defaultSpawn = this.currentMap.spawnPoints?.player || this.currentMap.spawns?.player || { x: 1, y: 1 };
+    const requestedSpawnX = Number(targetX ?? defaultSpawn.x) || 1;
+    const requestedSpawnY = Number(targetY ?? defaultSpawn.y) || 1;
+    const spawnTile = this._resolveSafeSpawnTile(requestedSpawnX, requestedSpawnY);
+    this.player.setPosition(spawnTile.x * TILE_SIZE + TILE_SIZE / 2, spawnTile.y * TILE_SIZE + TILE_SIZE / 2);
+    this.player.setVelocity(0, 0);
+    this.player.setCollideWorldBounds(true);
+
+    this.monsters = this.physics.add.group({ classType: Monster, runChildUpdate: false });
+    this.itemPickups = this.physics.add.group();
+    this._spawnMapItems();
+    this._spawnMonsters();
+    this._spawnNPCs();
+    this._setupCollisions();
+
+    this.portalZones = [];
+    this.portalLabels = [];
+    const portals = this._getMapPortals();
+    if (portals.length) {
+      this._createPortals(portals);
+    }
+    this._blockArrivalPortalUntilExit = true;
+    this._nudgePlayerAwayFromArrivalPortal();
+    this._portalCooldownUntil = this.time.now + 900;
+
+    this.cameras.main.setBounds(0, 0, this.mapWidth * TILE_SIZE, this.mapHeight * TILE_SIZE);
+    this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
+    this.cameras.main.resetFX();
+    this._createMinimap();
+    MapTransitionSystem.showMapName(this, this.currentMap?.nameKo || this.currentMap?.name || nextMapId);
+
+    if (this._getMonsterSpawns().length > 0) {
+      this._respawnTimer = this.time.addEvent({
+        delay: getGameData().spawnConfig.default.respawnTime || 15000,
+        callback: this._respawnMonsters,
+        callbackScope: this,
+        loop: true,
+      });
+    }
+
+    this._restoreInputState();
+    this._transitioning = false;
+    this._mapTransitionInProgress = false;
+    this.events.emit('player-stats-changed');
+    console.log(`[WorldScene] Changed map ${previousMapId} -> ${nextMapId}`);
+  }
+
+  restoreFromSaveData(data) {
+    if (!this.player || !data?.player) return false;
+
+    const savedMap = data.map || {};
+    const targetMapId = normalizeMapId(savedMap.id || this.mapId || 'field_01');
+    const savedX = Number(savedMap.x);
+    const savedY = Number(savedMap.y);
+    const tileX = Number.isFinite(Number(savedMap.tileX))
+      ? Math.floor(Number(savedMap.tileX))
+      : Math.floor((Number.isFinite(savedX) ? savedX : this.player.x) / TILE_SIZE);
+    const tileY = Number.isFinite(Number(savedMap.tileY))
+      ? Math.floor(Number(savedMap.tileY))
+      : Math.floor((Number.isFinite(savedY) ? savedY : this.player.y) / TILE_SIZE);
+
+    if (targetMapId !== this.mapId) {
+      this.changeMap(targetMapId, tileX, tileY);
+    }
+
+    Object.assign(this.player.stats, data.player.stats || {});
+    this.player.equipment = { ...this.player.equipment, ...(data.player.equipment || {}) };
+    this.player.inventory = Array.isArray(data.player.inventory)
+      ? data.player.inventory.map(entry => ({ ...entry }))
+      : [];
+    this.player.skills = Array.isArray(data.player.skills) ? [...data.player.skills] : this.player.skills;
+    this.player.skillSlots = Array.isArray(data.player.skillSlots) ? [...data.player.skillSlots] : this.player.skillSlots;
+    this.player.skillCooldowns = {};
+    this.player.buffs = [];
+    this.player.channelEffects = {};
+    this.player.activeSkillEffects = {};
+
+    if (this.proficiencySystem && data.proficiency) {
+      this.proficiencySystem.fromJSON(data.proficiency);
+    }
+
+    this._placePlayerFromSavedMap(savedMap);
+    this.player._updateEquipmentVisuals?.();
+    this.events.emit('player-stats-changed');
+    return true;
+  }
+
+  _placePlayerFromSavedMap(savedMap) {
+    const savedX = Number(savedMap?.x);
+    const savedY = Number(savedMap?.y);
+    const hasWorldPosition = Number.isFinite(savedX) && Number.isFinite(savedY);
+    const tileX = hasWorldPosition ? Math.floor(savedX / TILE_SIZE) : Number(savedMap?.tileX);
+    const tileY = hasWorldPosition ? Math.floor(savedY / TILE_SIZE) : Number(savedMap?.tileY);
+
+    if (hasWorldPosition && this._isWalkableTile(tileX, tileY)) {
+      this.player.setPosition(savedX, savedY);
+    } else {
+      const safeTile = this._resolveSafeSpawnTile(tileX, tileY);
+      this.player.setPosition(safeTile.x * TILE_SIZE + TILE_SIZE / 2, safeTile.y * TILE_SIZE + TILE_SIZE / 2);
+    }
+
+    this.player.setVelocity(0, 0);
+    this.player.setCollideWorldBounds(true);
+    this._blockArrivalPortalUntilExit = false;
+    this._portalCooldownUntil = this.time.now + 500;
+  }
+
+  _destroyCurrentMapRuntime() {
+    if (this._respawnTimer) {
+      this._respawnTimer.remove(false);
+      this._respawnTimer = null;
+    }
+    for (const collider of this._mapColliders || []) {
+      collider?.destroy?.();
+    }
+    this._mapColliders = [];
+
+    if (this._dialogBubble) {
+      this._dialogBubble.destroy();
+      this._dialogBubble = null;
+    }
+    if (this._dialogText) {
+      this._dialogText.destroy();
+      this._dialogText = null;
+    }
+
+    this.groundLayer?.destroy?.();
+    this.wallLayer?.destroy?.(true);
+    this.monsters?.destroy?.(true);
+    this.itemPickups?.destroy?.(true);
+    if (this.npcGroup) {
+      for (const npc of this.npcGroup.getChildren()) {
+        npc.nameLabel?.destroy?.();
+      }
+      this.npcGroup.destroy(true);
+    }
+    this.npcs = [];
+
+    for (const portal of this.portalZones || []) {
+      portal.label?.destroy?.();
+      portal.sprite?.destroy?.();
+    }
+    this.portalZones = [];
+    this.portalLabels = [];
+
+    this.minimapGfx?.destroy?.();
+    this.minimapPlayerDot?.destroy?.();
+    this.minimapGfx = null;
+    this.minimapPlayerDot = null;
   }
 
   _renderMap() {
@@ -261,6 +521,7 @@ export default class WorldScene extends Phaser.Scene {
 
         const sprite = this.add.image(px, py, tileKey);
         sprite.setDepth(0);
+        this.groundLayer.add(sprite);
 
         if (this.collisionData?.[y]?.[x] || tileType === 4 || tileType === 5 || tileType === 3) {
           const wall = this.wallLayer.create(px, py, tileKey);
@@ -292,6 +553,15 @@ export default class WorldScene extends Phaser.Scene {
     monster.spawnTileY = spawn.y;
     monster.spawnMonsterId = monsterId;
     this.monsters.add(monster);
+  }
+
+  _onPlayerMonsterCollide(player, monster) {
+    if (!monster || monster.isDead) return;
+    monster.setVelocity(0, 0);
+    if (monster.body) {
+      monster.body.velocity.x = 0;
+      monster.body.velocity.y = 0;
+    }
   }
 
   _spawnMonsters() {
@@ -359,7 +629,7 @@ export default class WorldScene extends Phaser.Scene {
       npc.setDepth(9);
       npc.setImmovable(true);
       npc.body.setSize(32, 32);
-      npc.body.setOffset(0, 16);
+      npc.body.setOffset(0, 32);
       npc.npcId = npcId;
       npc.npcData = npcData;
 
@@ -599,7 +869,7 @@ export default class WorldScene extends Phaser.Scene {
 
   update(time, delta) {
     // Player movement (4-directional only)
-    this.player.move(this.cursors, this.wasd, delta);
+    this.player.move(this._getMovementInput(), null, delta);
     this.player.update(time, delta);
 
     // Spacebar basic attack
@@ -726,8 +996,57 @@ export default class WorldScene extends Phaser.Scene {
     }
   }
 
+  _nudgePlayerAwayFromArrivalPortal() {
+    const arrivalPortal = this.portalZones.find(portal => (
+      Phaser.Math.Distance.Between(this.player.x, this.player.y, portal.x, portal.y) < PORTAL_RANGE
+    ));
+    if (!arrivalPortal) return;
+
+    const playerTileX = Math.floor(this.player.x / TILE_SIZE);
+    const playerTileY = Math.floor(this.player.y / TILE_SIZE);
+    let best = null;
+    let bestScore = Infinity;
+
+    for (let radius = 1; radius <= 4; radius++) {
+      for (let y = playerTileY - radius; y <= playerTileY + radius; y++) {
+        for (let x = playerTileX - radius; x <= playerTileX + radius; x++) {
+          if (!this._isWalkableTile(x, y)) continue;
+          const worldX = x * TILE_SIZE + TILE_SIZE / 2;
+          const worldY = y * TILE_SIZE + TILE_SIZE / 2;
+          const portalDist = Phaser.Math.Distance.Between(worldX, worldY, arrivalPortal.x, arrivalPortal.y);
+          if (portalDist < PORTAL_RANGE + 8) continue;
+          const playerDist = Phaser.Math.Distance.Between(worldX, worldY, this.player.x, this.player.y);
+          if (playerDist < bestScore) {
+            bestScore = playerDist;
+            best = { x: worldX, y: worldY };
+          }
+        }
+      }
+      if (best) break;
+    }
+
+    if (best) {
+      this.player.setPosition(best.x, best.y);
+      this.player.setVelocity(0, 0);
+      this._blockArrivalPortalUntilExit = false;
+    }
+  }
+
   _checkPortals() {
     if (this._transitioning) return;
+    if (this._blockArrivalPortalUntilExit) {
+      const nearPortal = this.portalZones.some(portal => (
+        Phaser.Math.Distance.Between(this.player.x, this.player.y, portal.x, portal.y) < PORTAL_RANGE
+      ));
+      if (nearPortal) {
+        for (const portal of this.portalZones) {
+          if (portal.label) portal.label.setVisible(false);
+        }
+        return;
+      }
+      this._blockArrivalPortalUntilExit = false;
+    }
+
     if (this.time.now < this._portalCooldownUntil) {
       for (const portal of this.portalZones) {
         if (portal.label) portal.label.setVisible(false);
